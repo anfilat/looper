@@ -11,10 +11,10 @@ export class AppUI {
   private player: PhrasePlayer | null = null;
   private subtitleOverlay: HTMLElement | null = null;
   private phraseCounter: HTMLElement | null = null;
+  private currentVideoUrl: string | null = null;
   private state: AppState = {
     phrases: [],
     currentIndex: 0,
-    isPaused: false,
     subtitlesVisible: false,
     videoFileName: "",
   };
@@ -74,7 +74,13 @@ export class AppUI {
     }
 
     const jsonText = await subtitleFile.text();
-    const jsonData = JSON.parse(jsonText);
+    let jsonData;
+    try {
+      jsonData = JSON.parse(jsonText);
+    } catch {
+      alert("Invalid JSON file. Please upload a valid .json3 subtitle file.");
+      return;
+    }
     const phrases = parsePhrases(jsonData);
 
     if (phrases.length === 0) {
@@ -90,7 +96,11 @@ export class AppUI {
   }
 
   private renderPlayer(videoFile: File, startIndex: number): void {
+    if (this.currentVideoUrl) {
+      URL.revokeObjectURL(this.currentVideoUrl);
+    }
     const videoUrl = URL.createObjectURL(videoFile);
+    this.currentVideoUrl = videoUrl;
 
     this.container.innerHTML = `
       <div class="player">
@@ -118,7 +128,7 @@ export class AppUI {
     this.video.addEventListener("loadeddata", () => {
       this.player!.start();
       this.updateCounter();
-    });
+    }, { once: true });
 
     this.setupKeyboard();
   }
