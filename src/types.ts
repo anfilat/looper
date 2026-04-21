@@ -7,6 +7,9 @@ export interface Phrase {
 export interface Json3Event {
   tStartMs: number;
   dDurationMs: number;
+  id?: number;
+  wWinId?: number;
+  aAppend?: number;
   segs?: { utf8: string; tOffsetMs?: number }[];
 }
 
