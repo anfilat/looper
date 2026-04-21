@@ -67,13 +67,24 @@ html, body, #app {
   left: 50%;
   transform: translateX(-50%);
   max-width: 80%;
-  padding: 8px 16px;
-  background: rgba(0, 0, 0, 0.75);
+  padding: 0;
+  background: transparent;
   color: #fff;
   font-size: 22px;
   text-align: center;
   border-radius: 6px;
   pointer-events: none;
+  visibility: hidden;
+}
+
+.subtitle-overlay:empty {
+  visibility: hidden;
+}
+
+.subtitle-overlay:not(:empty) {
+  visibility: visible;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.75);
 }
 
 .phrase-counter {
