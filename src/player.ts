@@ -9,6 +9,7 @@ export class PhrasePlayer {
   private phrases: Phrase[];
   private currentIndex: number = 0;
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
+  private animationFrameId: number | null = null;
   private speedIndex: number = DEFAULT_SPEED_INDEX;
   private onPhraseChange?: (index: number) => void;
 
@@ -76,6 +77,7 @@ export class PhrasePlayer {
 
   pause(): void {
     this.clearLoopTimer();
+    this.cancelAnimationFrame();
     this.video.pause();
   }
 
@@ -84,9 +86,10 @@ export class PhrasePlayer {
     this.watchLoop();
   }
 
+
   destroy(): void {
     this.clearLoopTimer();
-    this.video.removeEventListener("timeupdate", this.handleTimeUpdate);
+    this.cancelAnimationFrame();
   }
 
   private playPhrase(index: number): void {
@@ -100,28 +103,39 @@ export class PhrasePlayer {
   }
 
   private watchLoop(): void {
-    this.video.removeEventListener("timeupdate", this.handleTimeUpdate);
-    this.video.addEventListener("timeupdate", this.handleTimeUpdate);
+    this.cancelAnimationFrame();
+    this.animationFrameId = requestAnimationFrame(this.handleTimeUpdate);
   }
 
   private handleTimeUpdate = (): void => {
     const phrase = this.currentPhrase;
     if (!phrase) return;
 
-    if (this.video.currentTime * 1000 >= phrase.endTimeMs) {
+    if (this.video.currentTime * 1000 >= phrase.endTimeMs - 100) {
       this.video.pause();
       this.clearLoopTimer();
       this.loopTimer = setTimeout(() => {
         this.video.currentTime = phrase.startTimeMs / 1000;
         this.video.play();
+        this.watchLoop();
       }, LOOP_GAP_MS);
+      return;
     }
+
+    this.animationFrameId = requestAnimationFrame(this.handleTimeUpdate);
   };
 
   private clearLoopTimer(): void {
     if (this.loopTimer !== null) {
       clearTimeout(this.loopTimer);
       this.loopTimer = null;
+    }
+  }
+
+  private cancelAnimationFrame(): void {
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
     }
   }
 }
