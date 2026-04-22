@@ -6,6 +6,7 @@ interface Word {
 }
 
 const SENTENCE_END_RE = /[.!?]$/;
+const MAX_PHRASE_DURATION_MS = 10_000;
 
 function extractWords(data: Json3Data): Word[] {
   const words: Word[] = [];
@@ -39,6 +40,79 @@ function findNextRealWord(words: Word[], fromIndex: number): Word | null {
   return null;
 }
 
+function findSplitPoint(words: Word[]): number {
+  const firstReal = words.find((w) => w.text.trim() !== "");
+  const lastReal = [...words].reverse().find((w) => w.text.trim() !== "");
+  const midTime =
+    ((firstReal?.startTimeMs ?? words[0].startTimeMs) +
+      (lastReal?.startTimeMs ?? words[words.length - 1].startTimeMs)) /
+    2;
+
+  let bestComma = -1;
+  for (let i = 0; i < words.length - 1; i++) {
+    if (!words[i].text.includes(",")) continue;
+    if (
+      bestComma === -1 ||
+      Math.abs(words[i].startTimeMs - midTime) <
+        Math.abs(words[bestComma].startTimeMs - midTime)
+    ) {
+      bestComma = i;
+    }
+  }
+  if (bestComma !== -1) return bestComma;
+
+  let maxGap = 0;
+  let maxGapIdx = -1;
+  for (let i = 0; i < words.length - 1; i++) {
+    const gap = words[i + 1].startTimeMs - words[i].startTimeMs;
+    if (gap > maxGap) {
+      maxGap = gap;
+      maxGapIdx = i;
+    }
+  }
+  return maxGapIdx;
+}
+
+function buildPhrase(words: Word[], endTimeMs: number): Phrase {
+  const firstReal = words.find((w) => w.text.trim() !== "");
+  return {
+    startTimeMs: firstReal?.startTimeMs ?? words[0].startTimeMs,
+    endTimeMs,
+    text: words
+      .map((w) => w.text)
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim(),
+  };
+}
+
+function splitIfNeeded(words: Word[], endTimeMs: number): Phrase[] {
+  if (words.length <= 1) return [buildPhrase(words, endTimeMs)];
+
+  const firstReal = words.find((w) => w.text.trim() !== "");
+  const startMs = firstReal?.startTimeMs ?? words[0].startTimeMs;
+
+  if (endTimeMs - startMs <= MAX_PHRASE_DURATION_MS) {
+    return [buildPhrase(words, endTimeMs)];
+  }
+
+  const splitIdx = findSplitPoint(words);
+  if (splitIdx <= 0 || splitIdx >= words.length - 1) {
+    return [buildPhrase(words, endTimeMs)];
+  }
+
+  const left = words.slice(0, splitIdx + 1);
+  const right = words.slice(splitIdx + 1);
+  const rightFirstReal = right.find((w) => w.text.trim() !== "");
+  const leftEnd =
+    rightFirstReal?.startTimeMs ?? left[left.length - 1].startTimeMs + 500;
+
+  return [
+    ...splitIfNeeded(left, leftEnd),
+    ...splitIfNeeded(right, endTimeMs),
+  ];
+}
+
 export function parsePhrases(data: Json3Data): Phrase[] {
   const words = extractWords(data);
   if (words.length === 0) return [];
@@ -56,13 +130,7 @@ export function parsePhrases(data: Json3Data): Phrase[] {
         ? nextReal.startTimeMs
         : word.startTimeMs + 500;
 
-      const firstReal = sentenceWords.find((w) => w.text.trim() !== "");
-
-      phrases.push({
-        startTimeMs: firstReal?.startTimeMs ?? sentenceWords[0].startTimeMs,
-        endTimeMs,
-        text: sentenceWords.map((w) => w.text).join("").replace(/\s+/g, " ").trim(),
-      });
+      phrases.push(...splitIfNeeded(sentenceWords, endTimeMs));
       sentenceWords = [];
     }
   }
@@ -71,13 +139,10 @@ export function parsePhrases(data: Json3Data): Phrase[] {
     const lastReal = [...sentenceWords]
       .reverse()
       .find((w) => w.text.trim() !== "");
-    const firstReal = sentenceWords.find((w) => w.text.trim() !== "");
+    const endTimeMs =
+      (lastReal ?? sentenceWords[sentenceWords.length - 1]).startTimeMs + 500;
 
-    phrases.push({
-      startTimeMs: firstReal?.startTimeMs ?? sentenceWords[0].startTimeMs,
-      endTimeMs: (lastReal ?? sentenceWords[sentenceWords.length - 1]).startTimeMs + 500,
-      text: sentenceWords.map((w) => w.text).join("").replace(/\s+/g, " ").trim(),
-    });
+    phrases.push(...splitIfNeeded(sentenceWords, endTimeMs));
   }
 
   return phrases;
