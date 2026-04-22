@@ -14,7 +14,8 @@ A browser-based tool for looping through video phrases with subtitle support. De
 | `Space` | Pause / resume |
 | `←` | Previous phrase |
 | `→` | Next phrase |
-| `↑` / `↓` | Toggle subtitle text |
+| `↑` / `↓` | Increase / decrease playback speed |
+| `S` | Toggle subtitle text |
 | `0` / `Home` | Go to first phrase |
 
 Progress is saved per video in localStorage.

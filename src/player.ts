@@ -1,12 +1,15 @@
 import type { Phrase } from "./types";
 
 const LOOP_GAP_MS = 200;
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+const DEFAULT_SPEED_INDEX = 2;
 
 export class PhrasePlayer {
   private video: HTMLVideoElement;
   private phrases: Phrase[];
   private currentIndex: number = 0;
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
+  private speedIndex: number = DEFAULT_SPEED_INDEX;
   private onPhraseChange?: (index: number) => void;
 
   constructor(
@@ -51,6 +54,24 @@ export class PhrasePlayer {
 
   goToStart(): void {
     this.playPhrase(0);
+  }
+
+  increaseSpeed(): void {
+    if (this.speedIndex < SPEEDS.length - 1) {
+      this.speedIndex++;
+      this.video.playbackRate = SPEEDS[this.speedIndex];
+    }
+  }
+
+  decreaseSpeed(): void {
+    if (this.speedIndex > 0) {
+      this.speedIndex--;
+      this.video.playbackRate = SPEEDS[this.speedIndex];
+    }
+  }
+
+  get speed(): number {
+    return SPEEDS[this.speedIndex];
   }
 
   pause(): void {

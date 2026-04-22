@@ -95,3 +95,12 @@ html, body, #app {
   font-size: 14px;
   pointer-events: none;
 }
+
+.speed-label {
+  position: absolute;
+  top: 12px;
+  right: 100px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  pointer-events: none;
+}

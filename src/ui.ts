@@ -11,6 +11,7 @@ export class AppUI {
   private player: PhrasePlayer | null = null;
   private subtitleOverlay: HTMLElement | null = null;
   private phraseCounter: HTMLElement | null = null;
+  private speedLabel: HTMLElement | null = null;
   private currentVideoUrl: string | null = null;
   private state: AppState = {
     phrases: [],
@@ -107,6 +108,7 @@ export class AppUI {
         <video id="video" src="${videoUrl}"></video>
         <div class="subtitle-overlay" id="subtitleOverlay"></div>
         <div class="phrase-counter" id="phraseCounter"></div>
+        <div class="speed-label" id="speedLabel"></div>
       </div>
     `;
 
@@ -116,6 +118,9 @@ export class AppUI {
     ) as HTMLElement;
     this.phraseCounter = this.container.querySelector(
       "#phraseCounter"
+    ) as HTMLElement;
+    this.speedLabel = this.container.querySelector(
+      "#speedLabel"
     ) as HTMLElement;
 
     this.player = new PhrasePlayer(
@@ -128,6 +133,7 @@ export class AppUI {
     this.video.addEventListener("loadeddata", () => {
       this.player!.start();
       this.updateCounter();
+      this.updateSpeedLabel();
     }, { once: true });
 
     this.setupKeyboard();
@@ -148,8 +154,15 @@ export class AppUI {
         case "ArrowRight":
           this.player.nextPhrase();
           break;
-        case "ArrowDown":
         case "ArrowUp":
+          this.player.increaseSpeed();
+          this.updateSpeedLabel();
+          break;
+        case "ArrowDown":
+          this.player.decreaseSpeed();
+          this.updateSpeedLabel();
+          break;
+        case "KeyS":
           this.toggleSubtitles();
           break;
         case "Digit0":
@@ -197,6 +210,12 @@ export class AppUI {
   private updateCounter(): void {
     if (this.phraseCounter && this.player) {
       this.phraseCounter.textContent = `${this.player.phraseIndex + 1} / ${this.player.totalPhrases}`;
+    }
+  }
+
+  private updateSpeedLabel(): void {
+    if (this.speedLabel && this.player) {
+      this.speedLabel.textContent = `${this.player.speed}x`;
     }
   }
 

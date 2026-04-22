@@ -22,12 +22,12 @@ The project is deployed to GitHub Pages (base path: `/looper/`) via `.github/wor
 
 Vanilla TypeScript with Vite. No framework — pure DOM manipulation via classes.
 
-**Data flow:** YouTube JSON3 subtitle file → `parser.ts` (extracts words, groups into sentences, splits long phrases at 10s limit) → `Phrase[]` → `PhrasePlayer` (loops video to each phrase's time range with 200ms gap) → `AppUI` (renders video + subtitle overlay, handles keyboard input, persists progress to localStorage).
+**Data flow:** YouTube JSON3 subtitle file → `parser.ts` (extracts words, groups into sentences, splits long phrases at 10s limit) → `Phrase[]` → `PhrasePlayer` (loops video to each phrase's time range with 200ms gap, supports 0.5x–2x playback speed) → `AppUI` (renders video + subtitle overlay, handles keyboard input, persists progress to localStorage).
 
 **Key modules in `src/`:**
 - `parser.ts` — Converts JSON3 events into `Phrase[]`. Splits long sentences at commas or timing gaps. Recursively handles phrases exceeding 10s.
-- `player.ts` — `PhrasePlayer` class. Manages video playback, phrase looping via `timeupdate` events, and navigation (next/prev/start/pause/resume).
-- `ui.ts` — `AppUI` class. File drag-and-drop handling, player rendering, keyboard shortcuts (Space: play/pause, Left/Right: prev/next phrase, Up/Down: toggle subtitles, 0/Home: go to start), and localStorage progress persistence.
+- `player.ts` — `PhrasePlayer` class. Manages video playback, phrase looping via `timeupdate` events, playback speed control (0.5x–2x), and navigation (next/prev/start/pause/resume).
+- `ui.ts` — `AppUI` class. File drag-and-drop handling, player rendering, keyboard shortcuts (Space: play/pause, Left/Right: prev/next phrase, Up/Down: playback speed, S: toggle subtitles, 0/Home: go to start), and localStorage progress persistence.
 - `types.ts` — `Phrase`, `Json3Data`, `Json3Event`, `AppState` interfaces.
 
 **Tests** live alongside source (`parser.test.ts`). Tests cover the parser only — the player and UI are untested.
