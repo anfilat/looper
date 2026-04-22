@@ -16,6 +16,7 @@ export default defineConfig({
         description: "Language learning tool that loops through video phrases",
         theme_color: "#1a1a2e",
         background_color: "#000000",
+        id: "/looper/",
         display: "standalone",
         start_url: "/looper/",
         icons: [
