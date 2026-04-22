@@ -140,12 +140,16 @@ export class AppUI {
       switch (e.code) {
         case "Space":
           e.preventDefault();
-          this.player.nextPhrase();
+          this.togglePause();
           break;
         case "ArrowLeft":
           this.player.prevPhrase();
           break;
-        case "Period":
+        case "ArrowRight":
+          this.player.nextPhrase();
+          break;
+        case "ArrowDown":
+        case "ArrowUp":
           this.toggleSubtitles();
           break;
         case "Digit0":
@@ -156,28 +160,35 @@ export class AppUI {
     });
   }
 
+  private togglePause(): void {
+    if (!this.player) return;
+    if (this.video!.paused) {
+      this.player.resume();
+    } else {
+      this.player.pause();
+    }
+  }
+
   private toggleSubtitles(): void {
     if (!this.player || !this.subtitleOverlay) return;
 
     if (this.state.subtitlesVisible) {
       this.subtitleOverlay.textContent = "";
       this.state.subtitlesVisible = false;
-      this.player.resume();
     } else {
       const phrase = this.player.currentPhrase;
       if (phrase) {
         this.subtitleOverlay.textContent = phrase.text;
       }
       this.state.subtitlesVisible = true;
-      this.player.pause();
     }
   }
 
   private onPhraseChange(index: number): void {
     this.state.currentIndex = index;
-    this.state.subtitlesVisible = false;
-    if (this.subtitleOverlay) {
-      this.subtitleOverlay.textContent = "";
+    if (this.state.subtitlesVisible && this.subtitleOverlay) {
+      const phrase = this.player!.currentPhrase;
+      this.subtitleOverlay.textContent = phrase ? phrase.text : "";
     }
     this.updateCounter();
     this.saveProgress();
