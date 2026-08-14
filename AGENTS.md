@@ -1,10 +1,10 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working in this repository.
 
 ## Project Overview
 
-Looper is a browser-based language learning tool that loops through video phrases using YouTube JSON3 subtitles. Users drop a video file (MP4/WebM) and a matching `.json3` subtitle file, then each subtitle phrase plays in a continuous loop.
+Looper is a browser-based language learning tool that loops through video phrases using YouTube JSON3 subtitles. Users drop a video file (MP4/WebM) and a matching `.json3` subtitle file, then each subtitle phrase plays in a continuous loop. It ships as an installable **PWA** with offline support.
 
 ## Commands
 
@@ -16,18 +16,23 @@ npm run test:watch   # Run tests in watch mode
 npm run preview      # Preview production build
 ```
 
-The project is deployed to GitHub Pages (base path: `/looper/`) via `.github/workflows/deploy.yml` on push to main.
-
 ## Architecture
 
-Vanilla TypeScript with Vite. No framework — pure DOM manipulation via classes.
+Vanilla TypeScript with Vite. No framework — pure DOM manipulation via classes. Configured as a PWA via `vite-plugin-pwa` (manifest, service worker, offline fallback) in `vite.config.ts`, with base path `/looper/`.
+
+**Entry point:** `src/main.ts` imports `style.css`, mounts `AppUI` into `#app`.
 
 **Data flow:** YouTube JSON3 subtitle file → `parser.ts` (extracts words, groups into sentences, splits long phrases at 10s limit) → `Phrase[]` → `PhrasePlayer` (loops video to each phrase's time range with 200ms gap, supports 0.5x–2x playback speed) → `AppUI` (renders video + subtitle overlay, handles keyboard input, persists progress to localStorage).
 
 **Key modules in `src/`:**
+- `main.ts` — Entry point. Imports styles and instantiates `AppUI` on `#app`.
 - `parser.ts` — Converts JSON3 events into `Phrase[]`. Splits long sentences at commas or timing gaps. Recursively handles phrases exceeding 10s.
 - `player.ts` — `PhrasePlayer` class. Manages video playback, phrase looping via `timeupdate` events, playback speed control (0.5x–2x), and navigation (next/prev/start/pause/resume).
 - `ui.ts` — `AppUI` class. File drag-and-drop handling, player rendering, keyboard shortcuts (Space: play/pause, Left/Right: prev/next phrase, Up/Down: playback speed, S: toggle subtitles, 0/Home: go to start), and localStorage progress persistence.
 - `types.ts` — `Phrase`, `Json3Data`, `Json3Event`, `AppState` interfaces.
 
 **Tests** live alongside source (`parser.test.ts`). Tests cover the parser only — the player and UI are untested.
+
+## Deployment
+
+The project is deployed to GitHub Pages (base path: `/looper/`) via `.github/workflows/deploy.yml` on push to `main`. The workflow uses Node 24, runs `npm ci` + `npm run build`, and uploads `dist/` as the Pages artifact.

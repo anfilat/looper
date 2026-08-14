@@ -11,14 +11,9 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
-    "vite": "^8.0.9",
-    "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^4.1.5"
-  },
-  "overrides": {
-    "vite-plugin-pwa": {
-      "vite": "$vite"
-    }
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.10"
   }
 }
