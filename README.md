@@ -7,7 +7,9 @@ A browser-based tool for looping through video phrases with subtitle support. De
 1. Open the app and drop a video file (`.mp4`/`.webm`) and a YouTube `.json3` subtitle file
 2. Each phrase from the subtitle plays in a loop with a short gap between repeats
 
-### Keyboard shortcuts
+### Controls
+
+Keyboard shortcuts:
 
 | Key | Action |
 |---|---|
@@ -17,6 +19,12 @@ A browser-based tool for looping through video phrases with subtitle support. De
 | `↑` / `↓` | Increase / decrease playback speed |
 | `S` | Toggle subtitle text |
 | `0` / `Home` | Go to first phrase |
+
+Mouse:
+
+| Input | Action |
+|---|---|
+| Click anywhere in the app | Pause / resume (same as `Space`) |
 
 Progress is saved per video in localStorage.
 
