@@ -1,219 +1,178 @@
+import { FilePickerScreen, type FileHandles } from "./filePicker";
 import { parsePhrases } from "./parser";
-import { PhrasePlayer } from "./player";
-import type { AppState } from "./types";
+import { PlayerScreen } from "./playerScreen";
+import {
+  addRecent,
+  getRecentHandles,
+  loadRecents,
+  recentId as toRecentId,
+  removeRecent,
+  touchRecent,
+} from "./recents";
+import type { AppState, Json3Data } from "./types";
 
-const VIDEO_EXTENSIONS = [".mp4", ".webm"];
-const SUBTITLE_EXTENSION = ".json3";
-
+/**
+ * AppUI — thin orchestrator. Owns the app state and progress persistence,
+ * decides which screen (file picker / player) is mounted, and drives the
+ * shared "open files" flow used by drops, the system picker and recents.
+ */
 export class AppUI {
   private container: HTMLElement;
-  private video: HTMLVideoElement | null = null;
-  private player: PhrasePlayer | null = null;
-  private subtitleOverlay: HTMLElement | null = null;
-  private phraseCounter: HTMLElement | null = null;
-  private speedLabel: HTMLElement | null = null;
-  private currentVideoUrl: string | null = null;
+  private picker: FilePickerScreen | null = null;
+  private playerScreen: PlayerScreen | null = null;
+  /** Id of the recent entry for the currently open video, if any. */
+  private currentRecentId: string | null = null;
   private state: AppState = {
     phrases: [],
     currentIndex: 0,
-    subtitlesVisible: false,
     videoFileName: "",
   };
 
   constructor(container: HTMLElement) {
     this.container = container;
-    this.renderFilePicker();
+    this.showPicker();
   }
 
-  private renderFilePicker(): void {
-    this.container.innerHTML = `
-      <div class="file-picker">
-        <div class="drop-zone" id="dropZone">
-          <p>Drop video + json3 subtitle files here</p>
-          <p class="hint">or click to select files</p>
-          <input type="file" id="fileInput" multiple accept=".mp4,.webm,.json3" />
-        </div>
-      </div>
-    `;
+  // --- Screens ----------------------------------------------------------
 
-    const dropZone = this.container.querySelector("#dropZone") as HTMLElement;
-    const fileInput = this.container.querySelector(
-      "#fileInput"
-    ) as HTMLInputElement;
-
-    dropZone.addEventListener("click", () => fileInput.click());
-    dropZone.addEventListener("dragover", (e) => e.preventDefault());
-    dropZone.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (e.dataTransfer?.files) {
-        this.handleFiles(e.dataTransfer.files);
-      }
-    });
-    fileInput.addEventListener("change", () => {
-      if (fileInput.files) {
-        this.handleFiles(fileInput.files);
-      }
+  private showPicker(): void {
+    this.playerScreen?.destroy();
+    this.playerScreen = null;
+    this.picker = new FilePickerScreen(this.container, {
+      onSelect: (selection) =>
+        void this.openFiles(
+          selection.videoFile,
+          selection.subtitleFile,
+          selection,
+          null
+        ),
+      onOpenRecent: (id) => void this.openRecent(id),
     });
   }
 
-  private async handleFiles(files: FileList): Promise<void> {
-    let videoFile: File | null = null;
-    let subtitleFile: File | null = null;
-
-    for (const file of Array.from(files)) {
-      const ext = this.getExtension(file.name);
-      if (VIDEO_EXTENSIONS.includes(ext)) {
-        videoFile = file;
-      } else if (ext === SUBTITLE_EXTENSION) {
-        subtitleFile = file;
+  private showPlayer(videoFile: File, startIndex: number): void {
+    this.picker = null;
+    this.playerScreen = new PlayerScreen(
+      this.container,
+      videoFile,
+      this.state.phrases,
+      startIndex,
+      {
+        onPhraseChange: (index) => this.onPhraseChange(index),
+        onVideoError: () => this.handleVideoError(),
       }
-    }
+    );
+  }
 
-    if (!videoFile || !subtitleFile) {
-      alert("Please select a video file (.mp4/.webm) and a subtitle file (.json3)");
+  // --- Opening files ----------------------------------------------------
+
+  /** Re-open a recent entry: ask for permission, read both files, load them.
+    * Any failure removes the entry from the list. */
+  private async openRecent(id: string): Promise<void> {
+    const entry = loadRecents().find((item) => item.id === id);
+    if (!entry) {
+      this.picker?.refreshRecents();
       return;
     }
 
-    const jsonText = await subtitleFile.text();
-    let jsonData;
+    const handles = await getRecentHandles(id);
+    if (!handles) {
+      await this.failOpen(id, `Could not re-open "${entry.videoName}" — saved access to the files is gone. Removed from recent.`);
+      return;
+    }
+
     try {
-      jsonData = JSON.parse(jsonText);
+      for (const handle of [handles.video, handles.subtitle]) {
+        let permission =
+          (await handle.queryPermission?.({ mode: "read" })) ?? "granted";
+        if (permission === "prompt") {
+          permission =
+            (await handle.requestPermission?.({ mode: "read" })) ?? "denied";
+        }
+        if (permission !== "granted") {
+          throw new Error("Permission denied");
+        }
+      }
+      const videoFile = await handles.video.getFile();
+      const subtitleFile = await handles.subtitle.getFile();
+      await this.openFiles(videoFile, subtitleFile, null, id);
     } catch {
-      alert("Invalid JSON file. Please upload a valid .json3 subtitle file.");
+      await this.failOpen(id, `Could not load "${entry.videoName}". Removed from recent.`);
+    }
+  }
+
+  /** Shared open path for all sources (drop, picker, recents). */
+  private async openFiles(
+    videoFile: File,
+    subtitleFile: File,
+    handles: FileHandles | null,
+    recentId: string | null
+  ): Promise<void> {
+    this.currentRecentId = recentId;
+
+    let jsonData: unknown;
+    try {
+      jsonData = JSON.parse(await subtitleFile.text());
+    } catch {
+      await this.failOpen(recentId, "Invalid JSON file. Please upload a valid .json3 subtitle file.");
       return;
     }
-    const phrases = parsePhrases(jsonData);
+    const phrases = parsePhrases(jsonData as Json3Data);
 
     if (phrases.length === 0) {
-      alert("No phrases found in subtitle file");
+      await this.failOpen(recentId, "No phrases found in subtitle file");
       return;
+    }
+
+    if (recentId) {
+      await touchRecent(recentId, videoFile.name);
+    } else if (handles?.videoHandle && handles.subtitleHandle) {
+      try {
+        await addRecent(videoFile, {
+          video: handles.videoHandle,
+          subtitle: handles.subtitleHandle,
+        });
+        this.currentRecentId = toRecentId(videoFile);
+      } catch {
+        // Storage unavailable — recents are best-effort, playback is unaffected.
+      }
     }
 
     const savedIndex = this.loadProgress(videoFile.name);
     this.state.phrases = phrases;
     this.state.videoFileName = videoFile.name;
 
-    this.renderPlayer(videoFile, savedIndex);
+    this.showPlayer(videoFile, savedIndex);
   }
 
-  private renderPlayer(videoFile: File, startIndex: number): void {
-    if (this.currentVideoUrl) {
-      URL.revokeObjectURL(this.currentVideoUrl);
+  /** Show an error and drop the corresponding recent entry, if there is one. */
+  private async failOpen(recentId: string | null, message: string): Promise<void> {
+    this.currentRecentId = null;
+    if (recentId) {
+      await removeRecent(recentId);
+      this.picker?.refreshRecents();
     }
-    const videoUrl = URL.createObjectURL(videoFile);
-    this.currentVideoUrl = videoUrl;
-
-    this.container.innerHTML = `
-      <div class="player">
-        <video id="video" src="${videoUrl}"></video>
-        <div class="subtitle-overlay" id="subtitleOverlay"></div>
-        <div class="phrase-counter" id="phraseCounter"></div>
-        <div class="speed-label" id="speedLabel"></div>
-      </div>
-    `;
-
-    this.video = this.container.querySelector("#video") as HTMLVideoElement;
-    this.subtitleOverlay = this.container.querySelector(
-      "#subtitleOverlay"
-    ) as HTMLElement;
-    this.phraseCounter = this.container.querySelector(
-      "#phraseCounter"
-    ) as HTMLElement;
-    this.speedLabel = this.container.querySelector(
-      "#speedLabel"
-    ) as HTMLElement;
-
-    this.player = new PhrasePlayer(
-      this.video,
-      this.state.phrases,
-      startIndex,
-      (index) => this.onPhraseChange(index)
-    );
-
-    this.video.addEventListener("loadeddata", () => {
-      this.player!.start();
-      this.updateCounter();
-      this.updateSpeedLabel();
-    }, { once: true });
-
-    this.setupControls();
+    alert(message);
   }
 
-  private setupControls(): void {
-    document.addEventListener("keydown", (e) => {
-      if (!this.player) return;
-
-      switch (e.code) {
-        case "Space":
-          e.preventDefault();
-          this.player.togglePause();
-          break;
-        case "ArrowLeft":
-          this.player.prevPhrase();
-          break;
-        case "ArrowRight":
-          this.player.nextPhrase();
-          break;
-        case "ArrowUp":
-          this.player.increaseSpeed();
-          this.updateSpeedLabel();
-          break;
-        case "ArrowDown":
-          this.player.decreaseSpeed();
-          this.updateSpeedLabel();
-          break;
-        case "KeyS":
-          this.toggleSubtitles();
-          break;
-        case "Digit0":
-        case "Home":
-          this.player.goToStart();
-          break;
-      }
-    });
-
-    // Mouse click anywhere in the app toggles playback, same as Space.
-    document.addEventListener("click", () => {
-      if (!this.player) return;
-      this.player.togglePause();
-    });
-  }
-
-  private toggleSubtitles(): void {
-    if (!this.player || !this.subtitleOverlay) return;
-
-    if (this.state.subtitlesVisible) {
-      this.subtitleOverlay.textContent = "";
-      this.state.subtitlesVisible = false;
-    } else {
-      const phrase = this.player.currentPhrase;
-      if (phrase) {
-        this.subtitleOverlay.textContent = phrase.text;
-      }
-      this.state.subtitlesVisible = true;
-    }
-  }
+  // --- Progress ---------------------------------------------------------
 
   private onPhraseChange(index: number): void {
     this.state.currentIndex = index;
-    if (this.state.subtitlesVisible && this.subtitleOverlay) {
-      const phrase = this.player!.currentPhrase;
-      this.subtitleOverlay.textContent = phrase ? phrase.text : "";
-    }
-    this.updateCounter();
     this.saveProgress();
   }
 
-  private updateCounter(): void {
-    if (this.phraseCounter && this.player) {
-      this.phraseCounter.textContent = `${this.player.phraseIndex + 1} / ${this.player.totalPhrases}`;
+  /** The video blob could not be decoded / read — back to the picker, and if
+    * this open came from (or produced) a recent entry, remove it. */
+  private handleVideoError(): void {
+    const videoName = this.state.videoFileName;
+    const recentId = this.currentRecentId;
+    this.currentRecentId = null;
+    this.showPicker();
+    if (recentId) {
+      void removeRecent(recentId).then(() => this.picker?.refreshRecents());
     }
-  }
-
-  private updateSpeedLabel(): void {
-    if (this.speedLabel && this.player) {
-      this.speedLabel.textContent = `${this.player.speed}x`;
-    }
+    alert(`Could not load video "${videoName}".`);
   }
 
   private saveProgress(): void {
@@ -229,10 +188,5 @@ export class AppUI {
       return isNaN(index) ? 0 : index;
     }
     return 0;
-  }
-
-  private getExtension(filename: string): string {
-    const dotIndex = filename.lastIndexOf(".");
-    return dotIndex !== -1 ? filename.slice(dotIndex).toLowerCase() : "";
   }
 }

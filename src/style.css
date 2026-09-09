@@ -21,6 +21,13 @@ html, body, #app {
   color: #aaa;
 }
 
+.file-picker-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: min(640px, calc(100% - 48px));
+}
+
 .drop-zone {
   border: 2px dashed #555;
   border-radius: 12px;
@@ -46,6 +53,76 @@ html, body, #app {
 
 .drop-zone input[type="file"] {
   display: none;
+}
+
+/* Recent files list */
+.recents {
+  color: #aaa;
+}
+
+.recents-title {
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.recents-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recent-item {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #aaa;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.recent-item:hover {
+  background: #1a1a1a;
+  border-color: #333;
+  color: #fff;
+}
+
+.recent-remove {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #666;
+  font-size: 18px;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.recent-remove:hover {
+  background: #2a1a1a;
+  color: #fff;
 }
 
 /* Player */

@@ -22,13 +22,17 @@ Vanilla TypeScript with Vite. No framework — pure DOM manipulation via classes
 
 **Entry point:** `src/main.ts` imports `style.css`, mounts `AppUI` into `#app`.
 
-**Data flow:** YouTube JSON3 subtitle file → `parser.ts` (extracts words, groups into sentences, splits long phrases at 10s limit) → `Phrase[]` → `PhrasePlayer` (loops video to each phrase's time range with 200ms gap, supports 0.5x–2x playback speed) → `AppUI` (renders video + subtitle overlay, handles keyboard input, persists progress to localStorage).
+**Data flow:** YouTube JSON3 subtitle file → `parser.ts` (extracts words, groups into sentences, splits long phrases at 10s limit) → `Phrase[]` → `PhrasePlayer` (loops video to each phrase's time range with 200ms gap, supports 0.5x–2x playback speed) → `AppUI` (orchestrates `FilePickerScreen` / `PlayerScreen`, persists progress to localStorage).
 
 **Key modules in `src/`:**
 - `main.ts` — Entry point. Imports styles and instantiates `AppUI` on `#app`.
 - `parser.ts` — Converts JSON3 events into `Phrase[]`. Splits long sentences at commas or timing gaps. Recursively handles phrases exceeding 10s.
 - `player.ts` — `PhrasePlayer` class. Manages video playback, phrase looping via `timeupdate` events, playback speed control (0.5x–2x), and navigation (next/prev/start/pause/resume).
-- `ui.ts` — `AppUI` class. File drag-and-drop handling, player rendering, keyboard shortcuts (Space: play/pause, Left/Right: prev/next phrase, Up/Down: playback speed, S: toggle subtitles, 0/Home: go to start), and localStorage progress persistence.
+- `playerScreen.ts` — `PlayerScreen` class. The player screen: video element, subtitle overlay, phrase counter, speed label, keyboard shortcuts (Space: play/pause, Left/Right: prev/next phrase, Up/Down: playback speed, S: toggle subtitles, 0/Home: go to start), click-to-pause. `destroy()` removes its document listeners and revokes the video object URL.
+- `filePicker.ts` — `FilePickerScreen` class. The file selection screen: drop zone, recent-videos list (video names only), File System Access API picker with plain file-input fallback, video/subtitle classification by extension.
+- `recents.ts` — Recent files storage: display list (max 5, newest first) in localStorage, `FileSystemFileHandle`s in IndexedDB; add/remove/touch helpers.
+- `fs-access.d.ts` — Ambient declarations for the Chromium-only File System Access API parts used here.
+- `ui.ts` — `AppUI` class. Thin orchestrator: app state, the shared open flow (parse subtitles, recents bookkeeping, failure handling), transitions between `FilePickerScreen` and `PlayerScreen`, localStorage progress persistence.
 - `types.ts` — `Phrase`, `Json3Data`, `Json3Event`, `AppState` interfaces.
 
 **Tests** live alongside source (`parser.test.ts`). Tests cover the parser only — the player and UI are untested.

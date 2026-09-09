@@ -20,6 +20,5 @@ export interface Json3Data {
 export interface AppState {
   phrases: Phrase[];
   currentIndex: number;
-  subtitlesVisible: boolean;
   videoFileName: string;
 }
