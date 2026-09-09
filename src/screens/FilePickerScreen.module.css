@@ -1,0 +1,110 @@
+/* File picker screen */
+
+.filePicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #aaa;
+}
+
+.filePickerInner {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: min(640px, calc(100% - 48px));
+}
+
+.dropZone {
+  border: 2px dashed #555;
+  border-radius: 12px;
+  padding: 60px 80px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.dropZone:hover {
+  border-color: #888;
+}
+
+.dropZone p {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.hint {
+  font-size: 14px;
+  color: #666;
+}
+
+/* Recent files list */
+
+.recents {
+  color: #aaa;
+}
+
+.recentsTitle {
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.recentsList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recentItem {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #aaa;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.recentItem:hover {
+  background: #1a1a1a;
+  border-color: #333;
+  color: #fff;
+}
+
+.recentRemove {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #666;
+  font-size: 18px;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.recentRemove:hover {
+  background: #2a1a1a;
+  color: #fff;
+}

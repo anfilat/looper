@@ -16,9 +16,3 @@ export interface Json3Event {
 export interface Json3Data {
   events: Json3Event[];
 }
-
-export interface AppState {
-  phrases: Phrase[];
-  currentIndex: number;
-  videoFileName: string;
-}

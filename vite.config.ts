@@ -1,3 +1,4 @@
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -7,6 +8,7 @@ export default defineConfig({
     port: 3000,
   },
   plugins: [
+    react(),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["icons/icon.svg"],
