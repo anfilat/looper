@@ -10,6 +10,7 @@ export class PhrasePlayer {
   private currentIndex: number = 0;
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
   private animationFrameId: number | null = null;
+  private isPlaying: boolean = false;
   private speedIndex: number = DEFAULT_SPEED_INDEX;
   private onPhraseChange?: (index: number) => void;
 
@@ -39,6 +40,10 @@ export class PhrasePlayer {
 
   get totalPhrases(): number {
     return this.phrases.length;
+  }
+
+  get playing(): boolean {
+    return this.isPlaying;
   }
 
   nextPhrase(): void {
@@ -76,14 +81,27 @@ export class PhrasePlayer {
   }
 
   pause(): void {
+    this.isPlaying = false;
     this.clearLoopTimer();
     this.cancelAnimationFrame();
     this.video.pause();
   }
 
   resume(): void {
+    if (this.isPlaying) return;
+    this.isPlaying = true;
+    // A loop restart is already scheduled — it will resume playback on its own.
+    if (this.loopTimer !== null) return;
     this.video.play();
     this.watchLoop();
+  }
+
+  togglePause(): void {
+    if (this.isPlaying) {
+      this.pause();
+    } else {
+      this.resume();
+    }
   }
 
 
@@ -94,6 +112,7 @@ export class PhrasePlayer {
 
   private playPhrase(index: number): void {
     this.clearLoopTimer();
+    this.isPlaying = true;
     this.currentIndex = index;
     const phrase = this.phrases[index];
     this.video.currentTime = phrase.startTimeMs / 1000;

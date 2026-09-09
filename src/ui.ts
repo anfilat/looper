@@ -146,7 +146,7 @@ export class AppUI {
       switch (e.code) {
         case "Space":
           e.preventDefault();
-          this.togglePause();
+          this.player.togglePause();
           break;
         case "ArrowLeft":
           this.player.prevPhrase();
@@ -171,15 +171,6 @@ export class AppUI {
           break;
       }
     });
-  }
-
-  private togglePause(): void {
-    if (!this.player) return;
-    if (this.video!.paused) {
-      this.player.resume();
-    } else {
-      this.player.pause();
-    }
   }
 
   private toggleSubtitles(): void {
