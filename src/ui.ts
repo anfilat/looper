@@ -136,10 +136,10 @@ export class AppUI {
       this.updateSpeedLabel();
     }, { once: true });
 
-    this.setupKeyboard();
+    this.setupControls();
   }
 
-  private setupKeyboard(): void {
+  private setupControls(): void {
     document.addEventListener("keydown", (e) => {
       if (!this.player) return;
 
@@ -170,6 +170,12 @@ export class AppUI {
           this.player.goToStart();
           break;
       }
+    });
+
+    // Mouse click anywhere in the app toggles playback, same as Space.
+    document.addEventListener("click", () => {
+      if (!this.player) return;
+      this.player.togglePause();
     });
   }
 
