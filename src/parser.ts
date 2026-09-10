@@ -1,4 +1,4 @@
-import type { Json3Data, Phrase } from "./types";
+import type { Json3Data, Phrase, WordTiming } from "./types";
 
 interface Word {
   text: string;
@@ -74,7 +74,14 @@ function findSplitPoint(words: Word[]): number {
 }
 
 function buildPhrase(words: Word[], endTimeMs: number): Phrase {
-  const firstReal = words.find((w) => w.text.trim() !== "");
+  const realWords = words.filter((w) => w.text.trim() !== "");
+  const firstReal = realWords[0];
+  const wordTimings: WordTiming[] = realWords.map((w, i) => ({
+    text: w.text,
+    startTimeMs: w.startTimeMs,
+    endTimeMs:
+      i + 1 < realWords.length ? realWords[i + 1].startTimeMs : endTimeMs,
+  }));
   return {
     startTimeMs: firstReal?.startTimeMs ?? words[0].startTimeMs,
     endTimeMs,
@@ -83,6 +90,7 @@ function buildPhrase(words: Word[], endTimeMs: number): Phrase {
       .join("")
       .replace(/\s+/g, " ")
       .trim(),
+    words: wordTimings,
   };
 }
 

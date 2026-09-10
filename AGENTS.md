@@ -22,19 +22,19 @@ React 19 + TypeScript with Vite. Components are plain functions with hooks (no s
 
 **Entry point:** `src/main.tsx` imports `style.css` and renders `App` into `#app` via `createRoot`.
 
-**Data flow:** YouTube JSON3 subtitle file → `parser.ts` (extracts words, groups into sentences, splits long phrases at 10s limit) → `Phrase[]` → `PhrasePlayer` (loops video to each phrase's time range with 200ms gap, supports 0.5x–2x playback speed) → `App` (screen state, recents, progress persistence).
+**Data flow:** YouTube JSON3 subtitle file → `parser.ts` (extracts words with timings, groups into sentences, splits long phrases at 10s limit) → `Phrase[]` (each carries `words: WordTiming[]`) → `PhrasePlayer` (loops the current phrase or, in word mode, a single word; 200ms gap, 0.5x–2x playback speed) → `App` (screen state, recents, progress persistence).
 
 **Key modules in `src/`:**
 - `main.tsx` — Entry point. Imports styles and mounts `App` on `#app` via `createRoot`.
-- `parser.ts` — Converts JSON3 events into `Phrase[]`. Splits long sentences at commas or timing gaps. Recursively handles phrases exceeding 10s.
-- `player.ts` — `PhrasePlayer` class. Manages video playback, phrase looping via `requestAnimationFrame`, playback speed control (0.5x–2x), and navigation (next/prev/start/pause/resume).
+- `parser.ts` — Converts JSON3 events into `Phrase[]` with per-word timings (`WordTiming`: start/end per word). Splits long sentences at commas or timing gaps. Recursively handles phrases exceeding 10s.
+- `player.ts` — `PhrasePlayer` class. Manages video playback, phrase/word looping via `requestAnimationFrame`, playback speed control (0.5x–2x), navigation (next/prev/start/pause/resume), and two playback modes: phrase mode (whole phrase) and word mode (single word of the current phrase; `toggleMode`, `nextWord`/`prevWord`, `playToCurrentWord` — one-shot phrase start → current word via P, then restores the pre-P state). Word index resets to 0 on phrase change; phrase navigation without word timings falls back to the phrase range.
 - `hooks/usePhrasePlayer.ts` — React binding for `PhrasePlayer`: creates the player when the video mounts, starts looping on `loadeddata`, mirrors `phraseIndex`/`speed` into state, returns stable `controls`. Callbacks are held in refs so the player is never re-created.
-- `screens/PlayerScreen.tsx` — The player screen: video element, subtitle overlay, phrase counter, speed label, keyboard shortcuts (Space: play/pause, Left/Right: prev/next phrase, Up/Down: playback speed, S: toggle subtitles, 0/Home: go to start), click-to-pause. Cleanup (listeners, object URL) happens in effect cleanups.
+- `screens/PlayerScreen.tsx` — The player screen: video element, subtitle overlay (truncated at the current word in word mode), phrase/word counters, mode label, speed label, keyboard shortcuts (Space: play/pause, Left/Right: prev/next phrase, Up/Down: playback speed, W: toggle phrase/word mode, X/Z: next/prev word (word mode only), P: play phrase start → current word (word mode only), S: toggle subtitles, 0/Home: go to start), click-to-pause. Cleanup (listeners, object URL) happens in effect cleanups.
 - `screens/FilePickerScreen.tsx` — The file selection screen: drop zone, recents list, File System Access API picker with plain file-input fallback, video/subtitle classification by extension. The hidden file input lives outside the drop zone so its synthetic click does not re-trigger the drop-zone handler.
 - `recents.ts` — Recent files storage: display list (max 5, newest first) in localStorage, `FileSystemFileHandle`s in IndexedDB; add/remove/touch helpers.
 - `fs-access.d.ts` — Ambient declarations for the Chromium-only File System Access API parts used here.
 - `App.tsx` — `App` component. Thin orchestrator: screen state (picker/player), the shared open flow (parse subtitles, recents bookkeeping, failure handling), recents state, localStorage progress persistence.
-- `types.ts` — `Phrase`, `Json3Data`, `Json3Event` interfaces.
+- `types.ts` — `Phrase`, `WordTiming`, `Json3Data`, `Json3Event` interfaces.
 
 **Tests** live alongside source (`parser.test.ts`, `player.test.ts`). They cover the parser and the `PhrasePlayer` class; the React components are untested.
 

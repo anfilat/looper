@@ -154,4 +154,36 @@ describe("parsePhrases", () => {
     expect(result[0].endTimeMs).toBe(5000);
     expect(result[1].endTimeMs).toBe(5500);
   });
+
+  it("records word timings for each phrase", () => {
+    const data: Json3Data = {
+      events: [
+        {
+          tStartMs: 1000,
+          dDurationMs: 2000,
+          segs: [
+            { utf8: "one", tOffsetMs: 0 },
+            { utf8: " two.", tOffsetMs: 500 },
+          ],
+        },
+        {
+          tStartMs: 3000,
+          dDurationMs: 1000,
+          segs: [{ utf8: "Next." }],
+        },
+      ],
+    };
+
+    const result = parsePhrases(data);
+
+    // Each word ends where the next one starts; the last word ends with
+    // the phrase (next sentence start).
+    expect(result[0].words).toEqual([
+      { text: "one", startTimeMs: 1000, endTimeMs: 1500 },
+      { text: " two.", startTimeMs: 1500, endTimeMs: 3000 },
+    ]);
+    expect(result[1].words).toEqual([
+      { text: "Next.", startTimeMs: 3000, endTimeMs: 3500 },
+    ]);
+  });
 });

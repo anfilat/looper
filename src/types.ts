@@ -1,7 +1,16 @@
+export interface WordTiming {
+  text: string;
+  startTimeMs: number;
+  /** Start of the next word, or the phrase end for the last word. */
+  endTimeMs: number;
+}
+
 export interface Phrase {
   startTimeMs: number;
   endTimeMs: number;
   text: string;
+  /** Words with timings; drives word mode. */
+  words: WordTiming[];
 }
 
 export interface Json3Event {

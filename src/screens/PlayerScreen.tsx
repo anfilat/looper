@@ -25,7 +25,7 @@ export function PlayerScreen({
 }: PlayerScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [subtitlesVisible, setSubtitlesVisible] = useState(false);
-  const { phraseIndex, speed, controls } = usePhrasePlayer(
+  const { phraseIndex, wordIndex, mode, speed, controls } = usePhrasePlayer(
     videoRef,
     phrases,
     startIndex,
@@ -59,6 +59,18 @@ export function PlayerScreen({
         case "KeyS":
           setSubtitlesVisible((visible) => !visible);
           break;
+        case "KeyW":
+          controls.toggleMode();
+          break;
+        case "KeyX":
+          if (mode === "word") controls.nextWord();
+          break;
+        case "KeyZ":
+          if (mode === "word") controls.prevWord();
+          break;
+        case "KeyP":
+          if (mode === "word") controls.playToCurrentWord();
+          break;
         case "Digit0":
         case "Home":
           controls.goToStart();
@@ -67,9 +79,20 @@ export function PlayerScreen({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [controls]);
+  }, [controls, mode]);
 
   const currentPhrase = phrases[phraseIndex];
+  const wordCount = currentPhrase?.words.length ?? 0;
+  // In word mode subtitles stop at the current word — future words stay hidden.
+  const subtitleText =
+    mode === "word" && currentPhrase && wordCount > 0
+      ? currentPhrase.words
+          .slice(0, wordIndex + 1)
+          .map((w) => w.text)
+          .join("")
+          .replace(/\s+/g, " ")
+          .trim()
+      : currentPhrase?.text;
 
   // Mouse click on the video area toggles playback, same as Space. The
   // bottom bar is outside the clickable area.
@@ -77,12 +100,20 @@ export function PlayerScreen({
     <div className={styles.layout}>
       <div className={styles.player} onClick={controls.togglePause}>
         <video ref={videoRef} src={videoUrl} />
-        {subtitlesVisible && currentPhrase && (
-          <div className={styles.subtitleOverlay}>{currentPhrase.text}</div>
+        {subtitlesVisible && subtitleText && (
+          <div className={styles.subtitleOverlay}>{subtitleText}</div>
         )}
       </div>
       <div className={styles.bottomBar}>
         <div className={styles.speedLabel}>{speed}x</div>
+        <div className={styles.modeLabel}>
+          {mode === "word" ? "Word mode" : "Phrase mode"}
+        </div>
+        {mode === "word" && (
+          <div className={styles.wordCounter}>
+            {wordIndex + 1} / {wordCount}
+          </div>
+        )}
         <div className={styles.phraseCounter}>
           {phraseIndex + 1} / {phrases.length}
         </div>
