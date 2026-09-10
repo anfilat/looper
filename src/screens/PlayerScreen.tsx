@@ -89,7 +89,7 @@ export function PlayerScreen({
       ? currentPhrase.words
           .slice(0, wordIndex + 1)
           .map((w) => w.text)
-          .join("")
+          .join(" ")
           .replace(/\s+/g, " ")
           .trim()
       : currentPhrase?.text;

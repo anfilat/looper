@@ -76,8 +76,12 @@ function findSplitPoint(words: Word[]): number {
 function buildPhrase(words: Word[], endTimeMs: number): Phrase {
   const realWords = words.filter((w) => w.text.trim() !== "");
   const firstReal = realWords[0];
+  // Word texts are stored trimmed so that joining them with a space always
+  // reconstructs readable text. Raw seg texts may carry a leading space
+  // (" gold") or none at all ("read" after a "\n" separator seg) — the
+  // original spacing must not leak into word mode.
   const wordTimings: WordTiming[] = realWords.map((w, i) => ({
-    text: w.text,
+    text: w.text.replace(/\s+/g, " ").trim(),
     startTimeMs: w.startTimeMs,
     endTimeMs:
       i + 1 < realWords.length ? realWords[i + 1].startTimeMs : endTimeMs,

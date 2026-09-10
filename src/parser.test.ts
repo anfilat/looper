@@ -177,13 +177,55 @@ describe("parsePhrases", () => {
     const result = parsePhrases(data);
 
     // Each word ends where the next one starts; the last word ends with
-    // the phrase (next sentence start).
+    // the phrase (next sentence start). Word texts are trimmed — spacing
+    // is restored when joining.
     expect(result[0].words).toEqual([
       { text: "one", startTimeMs: 1000, endTimeMs: 1500 },
-      { text: " two.", startTimeMs: 1500, endTimeMs: 3000 },
+      { text: "two.", startTimeMs: 1500, endTimeMs: 3000 },
     ]);
     expect(result[1].words).toEqual([
       { text: "Next.", startTimeMs: 3000, endTimeMs: 3500 },
     ]);
+  });
+
+  it("keeps word texts joinable across newline separator events", () => {
+    // Auto-caption style: one event per line, words carry leading spaces
+    // except the first word after a "\n" separator — joining raw texts
+    // would glue "cornwell" and "read" together.
+    const data: Json3Data = {
+      events: [
+        {
+          tStartMs: 1040,
+          dDurationMs: 6560,
+          segs: [
+            { utf8: "sharps" },
+            { utf8: " gold", tOffsetMs: 480 },
+            { utf8: " by", tOffsetMs: 1280 },
+            { utf8: " cornwell", tOffsetMs: 1920 },
+          ],
+        },
+        { tStartMs: 4150, dDurationMs: 3450, aAppend: 1, segs: [{ utf8: "\n" }] },
+        {
+          tStartMs: 4160,
+          dDurationMs: 8000,
+          segs: [{ utf8: "read" }],
+        },
+      ],
+    };
+
+    const result = parsePhrases(data);
+
+    expect(result[0].words.map((w) => w.text)).toEqual([
+      "sharps",
+      "gold",
+      "by",
+      "cornwell",
+      "read",
+    ]);
+    // Joining with a single space reconstructs readable text.
+    expect(result[0].words.map((w) => w.text).join(" ")).toBe(
+      "sharps gold by cornwell read"
+    );
+    expect(result[0].text).toBe("sharps gold by cornwell read");
   });
 });
