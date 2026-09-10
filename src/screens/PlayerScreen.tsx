@@ -71,17 +71,22 @@ export function PlayerScreen({
 
   const currentPhrase = phrases[phraseIndex];
 
-  // Mouse click anywhere on the screen toggles playback, same as Space.
+  // Mouse click on the video area toggles playback, same as Space. The
+  // bottom bar is outside the clickable area.
   return (
-    <div className={styles.player} onClick={controls.togglePause}>
-      <video ref={videoRef} src={videoUrl} />
-      {subtitlesVisible && currentPhrase && (
-        <div className={styles.subtitleOverlay}>{currentPhrase.text}</div>
-      )}
-      <div className={styles.phraseCounter}>
-        {phraseIndex + 1} / {phrases.length}
+    <div className={styles.layout}>
+      <div className={styles.player} onClick={controls.togglePause}>
+        <video ref={videoRef} src={videoUrl} />
+        {subtitlesVisible && currentPhrase && (
+          <div className={styles.subtitleOverlay}>{currentPhrase.text}</div>
+        )}
       </div>
-      <div className={styles.speedLabel}>{speed}x</div>
+      <div className={styles.bottomBar}>
+        <div className={styles.speedLabel}>{speed}x</div>
+        <div className={styles.phraseCounter}>
+          {phraseIndex + 1} / {phrases.length}
+        </div>
+      </div>
     </div>
   );
 }
