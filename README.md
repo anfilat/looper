@@ -35,6 +35,29 @@ Mouse:
 
 Progress is saved per video in localStorage.
 
+## Sharper word boundaries (offline forced alignment)
+
+YouTube's word-level timestamps are approximate: in word mode words often lose
+their beginnings/endings and capture pieces of neighboring words. The offline
+helper `scripts/align_words.py` re-aligns the known subtitle text to the audio
+with a CTC forced aligner (Meta MMS via torchaudio) and writes a `.json3` in
+the same format, but with accurate word boundaries. Drop the video plus the
+aligned `.json3` into the app as usual — no app changes needed.
+
+```
+uv venv .venv --python 3.12                      # once
+uv pip install --python .venv/bin/python torch torchaudio uroman soundfile
+
+.venv/bin/python scripts/align_words.py VIDEO.mp4 SUBS.json3 -o SUBS.aligned.json3
+```
+
+The first run downloads the MMS aligner checkpoint (~1.2 GB). On Apple Silicon
+it processes ~6–7 subtitle events per second via MPS; a 1.5-hour video takes a
+few minutes. Useful flags: `--start/--end SEC` (align a time slice, handy for
+quick tests), `--limit N`, `--device cpu`, `--bias-ms` (default −50 ms; CTC
+word spans start slightly after the acoustic onset, so starts are shifted
+earlier for a small pre-roll cushion).
+
 ## Development
 
 ```
