@@ -24,7 +24,7 @@ React 19 + TypeScript with Vite. Components are plain functions with hooks (no s
 
 **Data flow:** video + YouTube JSON3 subtitle file → `scripts/align_words.py` (offline: forced alignment gives every word a real start *and* end, groups words into sentences, splits phrases longer than 10s) → `.phrases.json` (`{"version": 1, "phrases": ...}` shaped as `Phrase[]`) → `parser.ts` (thin validated loader) → `PhrasePlayer` (loops the current phrase or, in word mode, a single word; 200ms gap, 0.5x–2x playback speed) → `App` (screen state, recents, progress persistence).
 
-**Offline helper:** `scripts/align_words.py` — builds the `.phrases.json` the app plays: aligns the known subtitle text to the audio with a CTC forced aligner (torchaudio MMS_FA), so word starts/ends are acoustic, not "end = next word's start" guesses; unaligned events (e.g. outside `--start/--end`) keep original timings. Requires `torch`, `torchaudio`, `uroman`, `soundfile` and `ffmpeg` (see README).
+**Offline helper:** `scripts/align_words.py` — builds the `.phrases.json` the app plays: aligns the known subtitle text to the audio with a CTC forced aligner (torchaudio MMS_FA), so word starts/ends are acoustic, not "end = next word's start" guesses; groups words into sentences, splits phrases longer than 10s, and merges unstressed clitics (`the`, `of`, auxiliaries, pronouns, anything very short) with a neighbouring word when no pause separates them — lone clitic loops sound truncated or, under ~100 ms, do not play at all (the app cuts ~100 ms off every loop end). Unaligned events (e.g. outside `--start/--end`) keep original timings. Requires `torch`, `torchaudio`, `uroman`, `soundfile` and `ffmpeg` (see README).
 
 **Key modules in `src/`:**
 - `main.tsx` — Entry point. Imports styles and mounts `App` on `#app` via `createRoot`.
@@ -38,7 +38,7 @@ React 19 + TypeScript with Vite. Components are plain functions with hooks (no s
 - `App.tsx` — `App` component. Thin orchestrator: screen state (picker/player), the shared open flow (load the phrases file, recents bookkeeping, failure handling), recents state, localStorage progress persistence.
 - `types.ts` — `Phrase`, `WordTiming` interfaces.
 
-**Tests** live alongside source (`parser.test.ts`, `player.test.ts`). They cover the phrases loader and the `PhrasePlayer` class; the React components are untested.
+**Tests** live alongside source (`parser.test.ts`, `player.test.ts`). They cover the phrases loader and the `PhrasePlayer` class; the React components are untested. The clitic-merge logic in `scripts/align_words.py` has its own dependency-free checks: `python3 scripts/test_align_words.py` (run it when changing the merge rules).
 
 ## Deployment
 

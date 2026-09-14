@@ -43,8 +43,8 @@ words with per-word timings. It is built offline from a video and a YouTube
 subtitle text to the audio with a CTC forced aligner (Meta MMS via
 torchaudio). Word starts *and* ends come from the aligner — so in word mode a
 word loops over its actual sound, without the trailing silence up to the next
-word. Sentence grouping and the 10-second phrase splitting also happen in the
-script, so the app itself does no subtitle parsing.
+word. Sentence grouping, the 10-second phrase splitting and clitic merging
+(below) also happen in the script, so the app itself does no subtitle parsing.
 
 ```
 uv venv .venv --python 3.12                      # once
@@ -65,6 +65,26 @@ spans end before the acoustic offset), `--min-word-ms` (default 300 ms; the
 app stops word loops ~100 ms before `endTimeMs`, so shorter words would lose
 their tail), `--tail-ms` (default 250 ms; phrase-end padding after the last
 word).
+
+Unstressed clitics (`the`, `of`, `in`, …) sound truncated when looped on
+their own — acoustically they are usually fused with a neighbouring word,
+and units of ~100 ms or less do not sound at all, because the app cuts
+~100 ms off the end of every loop. The script therefore merges such words
+into neighbouring units: list-based forward clitics join the next word,
+auxiliaries and pronouns join the previous one, and any word that is very
+short by its raw aligned sound, or whose final unit is too short to survive
+the loop cut, joins a no-pause neighbour. Tune with `--clitic-gap-ms`
+(pause threshold), `--clitic-words` / `--clitic-back-words` (word lists;
+empty string disables), `--short-word-ms`, `--min-playable-ms`, and the
+`--max-group-words` / `--max-group-ms` group caps (3 words / 1000 ms by
+default). Merged units show up in `words[]` with a multi-word `text`
+(e.g. `"of the stuff"`) and span the whole group.
+
+Synthetic checks for the merge rules (no alignment deps needed):
+
+```
+python3 scripts/test_align_words.py
+```
 
 ## Development
 
