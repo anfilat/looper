@@ -190,7 +190,7 @@ def main() -> None:
             # Romanize each word separately so transcript word boundaries
             # always match the source words; join with single spaces.
             roman_words = [romanize(w) for w in words]
-            transcript = " ".join(rw for rw in roman_words if rw)
+            transcript = " ".join(rw for rw in roman_words if rw).lower()
             if not transcript.strip():
                 stats["fallback"] += 1
                 continue
@@ -242,15 +242,24 @@ def main() -> None:
                 if ch == " ":
                     wi += 1
                 word_of_char.append(min(wi, len(words) - 1))
-            word_frames: list[list[int]] = [[] for _ in words]
+            word_spans: list[list[tuple[int, int]]] = [[] for _ in words]
             for pos, ti in enumerate(char_token):
                 if ti is not None:
-                    st, en = token_span[ti]
-                    word_frames[word_of_char[pos]].extend(range(st, en))
+                    word_spans[word_of_char[pos]].append(token_span[ti])
 
+            gap_frames = int(0.25 / ratio)  # intra-word token gaps never reach this
             word_times: list[tuple[float, float, float] | None] = [None] * len(words)
             for wi in range(len(words)):
-                frames = word_frames[wi]
+                spans = word_spans[wi]
+                # Trim stray edge tokens: a span split from the rest of the
+                # word by a large gap is the aligner latching onto unrelated
+                # audio (typically the previous line's tail inside an
+                # overlapping rolling-caption crop), not this word's speech.
+                while len(spans) >= 2 and spans[1][0] - spans[0][1] > gap_frames:
+                    spans = spans[1:]
+                while len(spans) >= 2 and spans[-1][0] - spans[-2][1] > gap_frames:
+                    spans = spans[:-1]
+                frames = [f for st, en in spans for f in range(st, en)]
                 if not frames:
                     continue
                 start = crop_start + min(frames) * ratio + args.bias_ms / 1000.0
