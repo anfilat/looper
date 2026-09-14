@@ -1,6 +1,6 @@
 import type { Phrase } from "./types";
 
-const LOOP_GAP_MS = 200;
+const LOOP_GAP_MS = 500;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const DEFAULT_SPEED_INDEX = 2;
 
