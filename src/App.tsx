@@ -11,7 +11,7 @@ import {
 } from "./recents";
 import { FilePickerScreen, type FileSelection } from "./screens/FilePickerScreen";
 import { PlayerScreen } from "./screens/PlayerScreen";
-import type { Json3Data, Phrase } from "./types";
+import type { Phrase } from "./types";
 
 type Screen =
   | { kind: "picker" }
@@ -72,13 +72,13 @@ export function App() {
       try {
         jsonData = JSON.parse(await subtitleFile.text());
       } catch {
-        await failOpen(recentId, "Invalid JSON file. Please upload a valid .json3 subtitle file.");
+        await failOpen(recentId, "Invalid JSON file. Please upload a valid .phrases.json file.");
         return;
       }
-      const phrases = parsePhrases(jsonData as Json3Data);
+      const phrases = parsePhrases(jsonData);
 
       if (phrases.length === 0) {
-        await failOpen(recentId, "No phrases found in subtitle file");
+        await failOpen(recentId, "No phrases found in the phrases file");
         return;
       }
 

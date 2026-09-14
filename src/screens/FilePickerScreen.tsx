@@ -4,7 +4,7 @@ import { isFsAccessSupported, type RecentEntry } from "../recents";
 import styles from "./FilePickerScreen.module.css";
 
 const VIDEO_EXTENSIONS = [".mp4", ".webm"];
-const SUBTITLE_EXTENSION = ".json3";
+const SUBTITLE_EXTENSION = ".json";
 
 /** File System Access handles for freshly selected files, when available. */
 export interface FileHandles {
@@ -55,7 +55,7 @@ export function FilePickerScreen({
             accept: {
               "video/mp4": [".mp4"],
               "video/webm": [".webm"],
-              "application/json": [".json3"],
+              "application/json": [".json"],
             },
           },
         ],
@@ -93,7 +93,7 @@ export function FilePickerScreen({
     }
 
     if (!videoFile || !subtitleFile) {
-      alert("Please select a video file (.mp4/.webm) and a subtitle file (.json3)");
+      alert("Please select a video file (.mp4/.webm) and a phrases file (.json)");
       return;
     }
 
@@ -138,7 +138,7 @@ export function FilePickerScreen({
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".mp4,.webm,.json3"
+          accept=".mp4,.webm,.json"
           hidden
           onChange={onInputChange}
         />
@@ -148,7 +148,7 @@ export function FilePickerScreen({
           onDragOver={(e) => e.preventDefault()}
           onDrop={onDrop}
         >
-          <p>Drop video + json3 subtitle files here</p>
+          <p>Drop video + phrases file (.json) here</p>
           <p className={styles.hint}>or click to select files</p>
         </div>
         {recents.length > 0 && (

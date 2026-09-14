@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""Refine YouTube JSON3 word timings with forced alignment (torchaudio MMS_FA).
+"""Build a Looper phrases file from a video and YouTube JSON3 subtitles.
 
-Reads the original .json3 subtitle file, aligns every event's known text to the
-audio with a CTC forced aligner, and writes a .json3 in the same word-level
-format (one seg per word) where each word's tOffsetMs reflects its real start.
+Reads the .json3 subtitle file, re-aligns every event's known text to the
+audio with a CTC forced aligner (torchaudio MMS_FA), groups the words into
+sentences and phrases, and writes a .phrases.json the Looper app loads
+directly:
+
+  {"version": 1, "phrases": [
+      {"startTimeMs": ..., "endTimeMs": ..., "text": "...",
+       "words": [{"text": "...", "startTimeMs": ..., "endTimeMs": ...}]}]}
+
+Both word starts and ends come from the aligner (ends are no longer guessed
+as "the next word's start"). Sentence grouping and the 10-second phrase
+splitting also happen here, so the app needs no subtitle-parsing logic.
 
 Usage:
-  python scripts/align_words.py VIDEO_OR_AUDIO SUBS.json3 [-o OUT.json3]
+  python scripts/align_words.py VIDEO_OR_AUDIO SUBS.json3 [-o OUT.phrases.json]
       [--start SEC] [--end SEC] [--limit N] [--pad SEC] [--device auto]
+      [--bias-ms -50] [--end-bias-ms 75] [--min-word-ms 300] [--tail-ms 250]
 
   --start/--end  align only events starting inside [start, end] (seconds);
-                 other events are copied unchanged. Audio is extracted only
-                 for that window, so slices of long videos are cheap.
+                 other events keep their original timings (phrases are still
+                 built for the whole file). Audio is extracted only for that
+                 window, so slices of long videos are cheap.
   --limit        align at most N events (quick tests)
   --pad          extra audio context around each event window (default 0.75s)
   --device       auto (default), cpu, mps or cuda
@@ -24,10 +35,14 @@ import json
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 SAMPLE_RATE = 16000
 MAX_WINDOW_S = 15.0  # cap per-event crop even when original timings are wild
+MAX_PHRASE_MS = 10_000  # split longer sentences into loop-friendly phrases
+MIN_START_STEP_MS = 10  # keep word starts strictly increasing
+SENTENCE_END = (".", "!", "?")
 
 
 def load_audio(media: Path, cut_start_s: float, length_s: float | None):
@@ -57,15 +72,93 @@ def make_romanizer():
     return uroman.romanize_string
 
 
-def event_words(event: dict) -> list[str]:
-    """Whitespace-separated word tokens from an event's segs ('\\n' segs skipped)."""
-    words: list[str] = []
-    for seg in event.get("segs") or []:
-        text = seg.get("utf8", "")
-        if not text or text == "\n":
-            continue
-        words.extend(t for t in text.split() if t)
-    return words
+@dataclass
+class Word:
+    """One subtitle word with timings in ms (floats; rounded on output)."""
+
+    text: str
+    start: float  # aligned start, or the original one for skipped events
+    orig_start: float
+    end: float | None = None  # aligner end; None until aligned or filled
+    score: float = 0.0
+
+
+def flatten_words(events: list[dict]) -> tuple[list[Word], list[tuple[int, int]]]:
+    """All subtitle words in file order, plus each event's (offset, count) slice.
+
+    Tokens are whitespace-split per seg ("\\n" segs skipped) — the same
+    flattening the app-side parser used to do.
+    """
+    words: list[Word] = []
+    ranges: list[tuple[int, int]] = []
+    for e in events:
+        base = len(words)
+        start_ms = e.get("tStartMs", 0)
+        for seg in e.get("segs") or []:
+            text = seg.get("utf8", "")
+            if not text or text == "\n":
+                continue
+            seg_start = start_ms + (seg.get("tOffsetMs") or 0)
+            for tok in text.split():
+                words.append(Word(text=tok, start=seg_start, orig_start=seg_start))
+        ranges.append((base, len(words) - base))
+    return words, ranges
+
+
+def find_split_point(words: list[Word]) -> int:
+    """Where to split an over-long sentence: the comma closest to the middle,
+    else the largest timing gap between words. Only inner positions qualify
+    (a split after the first or before the last word is useless — the old
+    parser used to give up entirely when the best candidate landed on an
+    edge, leaving 100s phrases on unpunctuated stretches). Returns -1 when
+    no candidate exists."""
+    mid = (words[0].start + words[-1].start) / 2
+    commas = [i for i in range(1, len(words) - 1) if "," in words[i].text]
+    if commas:
+        return min(commas, key=lambda i: abs(words[i].start - mid))
+    best_gap, idx = 0.0, -1
+    for i in range(1, len(words) - 1):
+        gap = words[i + 1].start - words[i].start
+        if gap > best_gap:
+            best_gap, idx = gap, i
+    return idx
+
+
+def make_phrase(words: list[Word], tail_ms: float) -> dict:
+    return {
+        "startTimeMs": round(words[0].start),
+        "endTimeMs": round(words[-1].end + tail_ms),
+        "text": " ".join(w.text for w in words),
+        "words": [
+            {"text": w.text, "startTimeMs": round(w.start), "endTimeMs": round(w.end)}
+            for w in words
+        ],
+    }
+
+
+def split_if_needed(words: list[Word], tail_ms: float) -> list[dict]:
+    """Sentences longer than MAX_PHRASE_MS are split (recursively) at a comma
+    near the middle or at the largest gap between words."""
+    if len(words) <= 1 or words[-1].end + tail_ms - words[0].start <= MAX_PHRASE_MS:
+        return [make_phrase(words, tail_ms)]
+    idx = find_split_point(words)
+    if idx <= 0 or idx >= len(words) - 1:
+        return [make_phrase(words, tail_ms)]
+    return split_if_needed(words[: idx + 1], tail_ms) + split_if_needed(words[idx + 1 :], tail_ms)
+
+
+def build_phrases(words: list[Word], tail_ms: float) -> list[dict]:
+    """Group words into sentences by trailing ./!/? and split over-long ones."""
+    phrases: list[dict] = []
+    sentence: list[Word] = []
+    for w in words:
+        sentence.append(w)
+        if w.text.endswith(SENTENCE_END):
+            phrases.extend(split_if_needed(sentence, tail_ms))
+            sentence = []
+    if sentence:
+        phrases.extend(split_if_needed(sentence, tail_ms))
+    return phrases
 
 
 def token_runs(path: list[int]) -> list[tuple[int, int, int]]:
@@ -95,17 +188,28 @@ def main() -> None:
     ap.add_argument("--bias-ms", type=float, default=-50.0,
                     help="shift word starts by this many ms (default -50: CTC spans start "
                          "~50ms after the acoustic onset; negative adds a pre-roll cushion)")
+    ap.add_argument("--end-bias-ms", type=float, default=75.0,
+                    help="extend word ends by this many ms (default 75: CTC spans end "
+                         "before the acoustic offset)")
+    ap.add_argument("--min-word-ms", type=float, default=300.0,
+                    help="minimum word duration in ms (default 300: the app stops word "
+                         "loops ~100ms before endTimeMs, so shorter words lose their tail)")
+    ap.add_argument("--tail-ms", type=float, default=250.0,
+                    help="phrase end padding after the last word, in ms (default 250)")
     ap.add_argument("--device", default="auto", choices=["auto", "cpu", "mps", "cuda"])
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
-    out = args.out or args.subs.with_name(args.subs.stem + ".aligned.json3")
+    out = args.out or args.subs.with_name(args.subs.stem + ".phrases.json")
 
     data = json.loads(args.subs.read_text(encoding="utf-8"))
     events = data.get("events", [])
     if not events:
         sys.exit("no events in subtitle file")
     starts_ms = [e.get("tStartMs", 0) for e in events]
+    words, event_ranges = flatten_words(events)
+    if not words:
+        sys.exit("no words in subtitle file")
 
     def event_end_ms(i: int) -> float:
         e = events[i]
@@ -119,7 +223,7 @@ def main() -> None:
     # Which events to align.
     todo = []
     for i, e in enumerate(events):
-        if not event_words(e):
+        if event_ranges[i][1] == 0:
             continue
         if args.start is not None and starts_ms[i] < args.start * 1000:
             continue
@@ -171,8 +275,8 @@ def main() -> None:
 
     with torch.no_grad():
         for n, i in enumerate(todo):
-            e = events[i]
-            words = event_words(e)
+            base, count = event_ranges[i]
+            tokens = [w.text for w in words[base : base + count]]
             crop_start = max(0.0, starts_ms[i] / 1000 - args.pad)
             crop_end = min(audio_dur, event_end_ms(i) / 1000 + args.pad, crop_start + MAX_WINDOW_S)
             nws = next_word_start_ms[i]
@@ -189,7 +293,7 @@ def main() -> None:
 
             # Romanize each word separately so transcript word boundaries
             # always match the source words; join with single spaces.
-            roman_words = [romanize(w) for w in words]
+            roman_words = [romanize(w) for w in tokens]
             transcript = " ".join(rw for rw in roman_words if rw).lower()
             if not transcript.strip():
                 stats["fallback"] += 1
@@ -241,15 +345,15 @@ def main() -> None:
             for ch in transcript:
                 if ch == " ":
                     wi += 1
-                word_of_char.append(min(wi, len(words) - 1))
-            word_spans: list[list[tuple[int, int]]] = [[] for _ in words]
+                word_of_char.append(min(wi, len(tokens) - 1))
+            word_spans: list[list[tuple[int, int]]] = [[] for _ in tokens]
             for pos, ti in enumerate(char_token):
                 if ti is not None:
                     word_spans[word_of_char[pos]].append(token_span[ti])
 
             gap_frames = int(0.25 / ratio)  # intra-word token gaps never reach this
-            word_times: list[tuple[float, float, float] | None] = [None] * len(words)
-            for wi in range(len(words)):
+            word_times: list[tuple[float, float, float] | None] = [None] * len(tokens)
+            for wi in range(len(tokens)):
                 spans = word_spans[wi]
                 # Trim stray edge tokens: a span split from the rest of the
                 # word by a large gap is the aligner latching onto unrelated
@@ -281,58 +385,52 @@ def main() -> None:
                     fill_start = last_end
                     fill_end = nxt[0] if nxt else last_end + 0.05
                     word_times[wi] = (fill_start, fill_end, 0.0)
-                last_end = word_times[wi][1]  # type: ignore[index]
+                last_end = word_times[wi][1]
 
-            # Shift stats vs original word starts (word-level files only).
-            orig_starts = [starts_ms[i] + (seg.get("tOffsetMs") or 0)
-                           for seg in e.get("segs") or []
-                           if seg.get("utf8", "") not in ("", "\n") and seg["utf8"].split()]
-            for wi in range(min(len(orig_starts), len(words))):
-                stats["shifts"].append(word_times[wi][0] * 1000 - orig_starts[wi])  # type: ignore[index]
-
-            # Rewrite the event: one seg per word, YouTube word-level style.
-            new_start_ms = round(word_times[0][0] * 1000)  # type: ignore[index]
-            segs = []
-            for wi, word in enumerate(words):
-                off = max(0, round(word_times[wi][0] * 1000) - new_start_ms)  # type: ignore[index]
-                segs.append({"utf8": word if wi == 0 else " " + word, "tOffsetMs": off})
-            # No trailing "\n" seg: in YouTube word-level files the line break
-            # arrives as a separate aAppend event, which we keep untouched —
-            # a synthetic one here doubles the separator and confuses the
-            # parser's long-phrase splitting.
-            e["tStartMs"] = new_start_ms
-            e["dDurationMs"] = max(100, round(word_times[-1][1] * 1000) - new_start_ms)  # type: ignore[index]
-            e["segs"] = segs
+            # Record the aligned timings into the global word list.
+            for wi, wt in enumerate(word_times):
+                w = words[base + wi]
+                w.start = wt[0] * 1000
+                w.end = wt[1] * 1000
+                w.score = wt[2]
+                stats["shifts"].append(w.start - w.orig_start)
             stats["events"] += 1
-            stats["words"] += len(words)
+            stats["words"] += count
             if args.verbose or (n + 1) % 200 == 0:
                 print(f"  {n + 1}/{len(todo)} events aligned", file=sys.stderr)
 
-    # The app derives each word's end from the next word's start, so word
-    # starts must strictly increase across the whole file. Rolling-caption
-    # windows overlap, so adjacent aligned events can violate this; bump the
-    # latecomers by the minimum amount.
-    prev_ms = None
-    for e in events:
-        segs = [s for s in e.get("segs") or []
-                if s.get("utf8") not in ("", "\n") and s["utf8"].strip()]
-        for idx, s in enumerate(segs):
-            off = s.get("tOffsetMs") or 0
-            start = e["tStartMs"] + off
-            if prev_ms is not None and start <= prev_ms:
-                delta = prev_ms + 10 - start
-                if idx == 0:
-                    e["tStartMs"] += delta  # shift the whole event, offsets stay
-                else:
-                    s["tOffsetMs"] = off + delta
-                start = prev_ms + 10
-            prev_ms = start
+    # Word starts must strictly increase across the whole file (word order):
+    # rolling-caption windows overlap, so adjacent aligned events can violate
+    # this; bump the latecomers by the minimum amount.
+    prev_start = None
+    for w in words:
+        if prev_start is not None and w.start <= prev_start:
+            w.start = prev_start + MIN_START_STEP_MS
+        prev_start = w.start
 
-    out.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    # Word ends: aligned words use the aligner's end plus a bias, at least
+    # min-word long, and never past the next word's start. Fallback words
+    # (unaligned events) keep the old heuristic: end at the next word's start.
+    for i, w in enumerate(words):
+        next_start = words[i + 1].start if i + 1 < len(words) else None
+        if w.end is not None:
+            end = max(w.end + args.end_bias_ms, w.start + args.min_word_ms)
+        else:
+            end = next_start if next_start is not None else w.start + 500
+        if next_start is not None:
+            # Clamp last: aligned starts can sit a few ms apart, and the
+            # min-duration floor must never push an end past the next start.
+            end = min(end, next_start)
+        else:
+            end = max(end, w.start + MIN_START_STEP_MS)
+        w.end = end
+
+    phrases = build_phrases(words, args.tail_ms)
+    out.write_text(json.dumps({"version": 1, "phrases": phrases}, ensure_ascii=False), encoding="utf-8")
 
     shifts, scores = stats["shifts"], stats["scores"]
     print(f"\n{out}: {stats['events']} events / {stats['words']} words aligned, "
-          f"{stats['fallback']} kept original", file=sys.stderr)
+          f"{stats['fallback']} kept original, {len(phrases)} phrases", file=sys.stderr)
     if shifts:
         mean = sum(shifts) / len(shifts)
         mae = sum(abs(s) for s in shifts) / len(shifts)
