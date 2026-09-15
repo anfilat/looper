@@ -122,7 +122,7 @@ class Looper:
         self.word_mode = bool(args.word_mode)
         self.speed = min(max(args.speed, SPEED_MIN), SPEED_MAX)
         self.paused = False
-        self.show_subtitles = True
+        self.show_subtitles = False
         self.prefix = False          # P: one-shot phrase start -> current word
         self.prefix_was_paused = False  # pause state to restore when it ends
         self.dirty = False           # worker changed visible state; main loop redraws
