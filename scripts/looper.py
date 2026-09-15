@@ -266,7 +266,7 @@ class Looper:
                 self.prefix = False
                 self.paused = self.prefix_was_paused
                 self.bump()
-                self.dirty = True  # "· пауза" returns with the restored state
+                self.dirty = True  # the status line shows the restored pause again
                 continue
             if finished:
                 self.gap_sleep(token)
@@ -282,10 +282,10 @@ class Looper:
 
     def status_line(self) -> str:
         words = self.words()
-        word_part = (f"слово {self.word_idx + 1}/{len(words)} · " if self.word_mode and words else "")
-        mode = "слово" if self.word_mode else "фраза"
-        pause = " · пауза" if self.paused else ""
-        return (f"фраза {self.phrase_idx + 1}/{len(self.phrases)} · {word_part}"
+        word_part = (f"word {self.word_idx + 1}/{len(words)} · " if self.word_mode and words else "")
+        mode = "word" if self.word_mode else "phrase"
+        pause = " · paused" if self.paused else ""
+        return (f"phrase {self.phrase_idx + 1}/{len(self.phrases)} · {word_part}"
                 f"{mode} · {self.speed:g}x{pause}")
 
     def draw(self) -> None:
