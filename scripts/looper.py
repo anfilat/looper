@@ -21,12 +21,13 @@ Usage:
 
 Keys (same as the app):
   Space      pause/resume (resumes from the start of the unit)
-  Left/Right previous/next phrase
+  Left/Right previous/next phrase (unpauses)
   W          toggle phrase/word mode
-  Z / X      previous/next word (word mode)
-  P          play phrase start -> current word once, then resume word loop
+  Z / X      previous/next word (word mode; unpauses)
+  P          play phrase start -> current word once, then return to the
+             state before P (word loop, or pause if it was paused)
   Up/Down    playback speed 0.5x..2.0x (step 0.25, pitch preserved)
-  0 / Home   go to the first phrase
+  0 / Home   go to the first phrase (unpauses)
   S          toggle subtitle line
   Q / Ctrl-C quit
 
@@ -123,6 +124,8 @@ class Looper:
         self.paused = False
         self.show_subtitles = True
         self.prefix = False          # P: one-shot phrase start -> current word
+        self.prefix_was_paused = False  # pause state to restore when it ends
+        self.dirty = False           # worker changed visible state; main loop redraws
         self.quit = Event()
 
         self.token = 0               # bumped on any unit/speed change
@@ -261,7 +264,9 @@ class Looper:
                 continue
             if finished and unit.kind == "prefix":
                 self.prefix = False
+                self.paused = self.prefix_was_paused
                 self.bump()
+                self.dirty = True  # "· пауза" returns with the restored state
                 continue
             if finished:
                 self.gap_sleep(token)
@@ -321,9 +326,9 @@ class Looper:
         self._pending += data
         return True
 
-    def read_key(self) -> str | None:
+    def read_key(self, timeout: float | None = None) -> str | None:
         """Next key: a decoded character, a named key (up/down/left/right/
-        home/esc), or None on EOF."""
+        home/esc), "" on poll timeout, or None on EOF."""
         while True:
             if self._pending:
                 if self._pending.startswith(b"\x1b"):
@@ -362,8 +367,10 @@ class Looper:
                     continue
                 self._pending = self._pending[1:]  # undecodable: drop a byte
                 continue
-            if self._eof or not self._fill():
+            if self._eof:
                 return None
+            if not self._fill(timeout):
+                return ""
 
     def handle_key(self, key: str) -> None:
         if key == " ":
@@ -372,10 +379,12 @@ class Looper:
         elif key in ("right", "d"):
             self.phrase_idx = min(self.phrase_idx + 1, len(self.phrases) - 1)
             self.word_idx = 0
+            self.paused = False
             self.bump()
         elif key in ("left", "a"):
             self.phrase_idx = max(self.phrase_idx - 1, 0)
             self.word_idx = 0
+            self.paused = False
             self.bump()
         elif key in ("w", "W", "ц", "Ц"):
             self.word_mode = not self.word_mode
@@ -383,13 +392,16 @@ class Looper:
         elif key in ("x", "X", "ч", "Ч"):
             if self.word_mode:
                 self.word_idx = min(self.word_idx + 1, max(len(self.words()) - 1, 0))
+                self.paused = False
                 self.bump()
         elif key in ("z", "Z", "я", "Я"):
             if self.word_mode:
                 self.word_idx = max(self.word_idx - 1, 0)
+                self.paused = False
                 self.bump()
         elif key in ("p", "P", "з", "З"):
             if self.word_mode and self.words():
+                self.prefix_was_paused = self.paused
                 self.prefix = True
                 self.paused = False
                 self.bump()
@@ -402,6 +414,7 @@ class Looper:
         elif key in ("0", "home"):
             self.phrase_idx = 0
             self.word_idx = 0
+            self.paused = False
             self.bump()
         elif key in ("s", "S", "ы", "Ы"):
             self.show_subtitles = not self.show_subtitles
@@ -424,9 +437,14 @@ class Looper:
             worker.start()
             self.draw()
             while not self.quit.is_set():
-                key = self.read_key()
+                key = self.read_key(0.2)
                 if key is None:  # EOF on stdin
                     break
+                if key == "":  # poll: worker may have changed visible state
+                    if self.dirty:
+                        self.dirty = False
+                        self.draw()
+                    continue
                 self.handle_key(key)
                 self.draw()
         except KeyboardInterrupt:
