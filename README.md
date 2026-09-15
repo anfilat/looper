@@ -86,6 +86,53 @@ Synthetic checks for the merge rules (no alignment deps needed):
 python3 scripts/test_align_words.py
 ```
 
+## Cutting one word into a file
+
+`scripts/cut_word.py` slices a single word (or, without `--word`, a whole
+phrase) out of the media file into a new audio file, using the aligned
+per-word timings. Numbers are 1-based, like the app's counters:
+
+```
+python3 scripts/cut_word.py VIDEO.mp4 FILE.phrases.json --phrase 3 --word 5
+python3 scripts/cut_word.py VIDEO.mp4 FILE.phrases.json --phrase 3      # whole phrase
+```
+
+By default the slice is re-encoded for accurate cut edges (`--copy` for a
+fast stream copy), and `--pad-ms N` pads the window on both sides. Requires
+`ffmpeg` on PATH.
+
+The aligner's bias defaults exist to compensate the browser player's loop
+behaviour (it stops word loops ~100 ms before `endTimeMs`). For cleanly cut
+standalone words, build an unbiased phrases file and cut from it:
+
+```
+.venv/bin/python scripts/align_words.py VIDEO.mp4 SUBS.json3 \
+    -o SUBS.clean.phrases.json --bias-ms 0 --end-bias-ms 0 --min-word-ms 0
+python3 scripts/cut_word.py VIDEO.mp4 SUBS.clean.phrases.json --phrase 5 --word 2
+```
+
+## Console player
+
+`scripts/looper.py` runs the app's loops in a terminal. The current unit is
+rendered once by ffmpeg — cut, tempo-stretched (pitch preserved), with 8 ms
+fades — and then looped as a file, so boundaries play back exactly as they
+are stored: nothing is trimmed or seeked imprecisely. Handy with an
+unbiased phrases file (see above) when you want to hear cleanly cut words.
+
+```
+python3 scripts/looper.py VIDEO.mp4 FILE.phrases.json [--phrase N] [--word-mode]
+    [--speed 1.0] [--gap-ms 500] [--pad-ms 0] [--no-progress]
+```
+
+The keyboard mirrors the app — `Space`, `←`/`→`, `↑`/`↓`, `W`, `X`/`Z`, `P`,
+`S`, `0`/`Home` — plus `Q` to quit (Cyrillic layout equivalents work too).
+Subtitles behave exactly like the app: plain text, cut off after the
+current word in word mode. Progress is saved to
+`FILE.phrases.json.progress` and restored on the next run; `--phrase`
+overrides it, `--no-progress` disables it. Playback goes through `afplay`
+(macOS) or `ffplay -nodisp`; pausing stops the sound and resumes the unit
+from its start.
+
 ## Development
 
 ```
