@@ -9,7 +9,9 @@ of the requested word (or phrase), and slices the audio with ffmpeg:
 
 Phrase and word numbers are 1-based, matching the counters shown in the app.
 Omit --word to cut the whole phrase. Word ends are acoustic (forced-alignment)
-and tight, so a little --pad-ms often makes the cut sound more natural.
+and tight, so a little --pad-ms often makes the cut sound more natural; for
+cleanly cut standalone words build the phrases file with the "Player
+recipes" flags from align_words.py's docstring.
 
 By default the slice is re-encoded (accurate cut edges, codec chosen by the
 output extension); --copy switches to fast stream copy, where edges snap to

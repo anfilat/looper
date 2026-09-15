@@ -31,6 +31,15 @@ Usage:
   --limit        align at most N events (quick tests)
   --pad          extra audio context around each event window (default 0.75s)
   --device       auto (default), cpu, mps or cuda
+
+Player recipes: the timing defaults target the deprecated browser player
+(--bias-ms -50 and --min-word-ms 300 compensate its imprecise seeks and its
+~100 ms loop-end cut). For the console player (scripts/looper.py) and
+standalone cuts (scripts/cut_word.py) run with --bias-ms 0 --end-bias-ms 75
+--min-word-ms 0 — keep --end-bias-ms: it corrects the aligner itself (raw CTC
+ends sit before the acoustic offset; a final stop's release lands up to
+~70 ms after the aligned end). Word ends are clamped to the next word's
+start, so the end bias never swallows a neighbouring word in fused speech.
 """
 
 from __future__ import annotations
