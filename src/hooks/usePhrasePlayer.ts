@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { PhrasePlayer, type PlaybackMode } from "../player";
+import { PhrasePlayer } from "../player";
 import type { Phrase } from "../types";
 
 /** Imperative controls over the phrase loop. Stable across renders. */
@@ -11,34 +11,20 @@ export interface PhrasePlayerControls {
   increaseSpeed(): void;
   decreaseSpeed(): void;
   togglePause(): void;
-  toggleMode(): void;
-  nextWord(): void;
-  prevWord(): void;
-  playToCurrentWord(): void;
 }
 
 export interface UsePhrasePlayerResult {
   /** Index of the current phrase; kept in sync with the player. */
   phraseIndex: number;
-  /** Index of the current word within the phrase (word mode). */
-  wordIndex: number;
-  /** Current loop target: whole phrase or a single word. */
-  mode: PlaybackMode;
   /** Current playback speed, e.g. 1 → "1x". */
   speed: number;
   controls: PhrasePlayerControls;
 }
 
-interface PlayerState {
-  phraseIndex: number;
-  wordIndex: number;
-  mode: PlaybackMode;
-}
-
 /**
  * React binding for the PhrasePlayer class. Creates the player once the
  * video element is mounted, starts looping once the video has data,
- * and destroys it on unmount. Callbacks are kept in refs so the player is
+ * and destroys it on unmount. Callbacks are held in refs so the player is
  * never re-created when the parent re-renders with new closures.
  */
 export function usePhrasePlayer(
@@ -49,11 +35,7 @@ export function usePhrasePlayer(
   onVideoError: () => void
 ): UsePhrasePlayerResult {
   const playerRef = useRef<PhrasePlayer | null>(null);
-  const [state, setState] = useState<PlayerState>({
-    phraseIndex: startIndex,
-    wordIndex: 0,
-    mode: "phrase",
-  });
+  const [phraseIndex, setPhraseIndex] = useState(startIndex);
   const [speed, setSpeed] = useState(1);
   const lastPhraseIndexRef = useRef(startIndex);
 
@@ -69,11 +51,7 @@ export function usePhrasePlayer(
     if (!video) return;
 
     const player = new PhrasePlayer(video, phrases, startIndex, () => {
-      setState({
-        phraseIndex: player.phraseIndex,
-        wordIndex: player.wordIndex,
-        mode: player.currentMode,
-      });
+      setPhraseIndex(player.phraseIndex);
       // The app persists progress per phrase — only report real changes.
       if (player.phraseIndex !== lastPhraseIndexRef.current) {
         lastPhraseIndexRef.current = player.phraseIndex;
@@ -110,10 +88,6 @@ export function usePhrasePlayer(
       prevPhrase: () => playerRef.current?.prevPhrase(),
       goToStart: () => playerRef.current?.goToStart(),
       togglePause: () => playerRef.current?.togglePause(),
-      toggleMode: () => playerRef.current?.toggleMode(),
-      nextWord: () => playerRef.current?.nextWord(),
-      prevWord: () => playerRef.current?.prevWord(),
-      playToCurrentWord: () => playerRef.current?.playToCurrentWord(),
       increaseSpeed: () => {
         playerRef.current?.increaseSpeed();
         if (playerRef.current) setSpeed(playerRef.current.speed);
@@ -126,5 +100,5 @@ export function usePhrasePlayer(
     []
   );
 
-  return { ...state, speed, controls };
+  return { phraseIndex, speed, controls };
 }

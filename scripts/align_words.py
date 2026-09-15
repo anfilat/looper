@@ -19,7 +19,7 @@ splitting also happen here, so the app needs no subtitle-parsing logic.
 Usage:
   python scripts/align_words.py VIDEO_OR_AUDIO SUBS.json3 [-o OUT.phrases.json]
       [--start SEC] [--end SEC] [--limit N] [--pad SEC] [--device auto]
-      [--bias-ms -50] [--end-bias-ms 75] [--min-word-ms 300] [--tail-ms 250]
+      [--bias-ms 0] [--end-bias-ms 75] [--tail-ms 250]
       [--clitic-gap-ms 200] [--clitic-words LIST] [--clitic-back-words LIST]
       [--short-word-ms 80] [--min-playable-ms 150] [--max-group-words 3]
       [--max-group-ms 1000]
@@ -32,12 +32,8 @@ Usage:
   --pad          extra audio context around each event window (default 0.75s)
   --device       auto (default), cpu, mps or cuda
 
-Player recipes: the timing defaults target the deprecated browser player
-(--bias-ms -50 and --min-word-ms 300 compensate its imprecise seeks and its
-~100 ms loop-end cut). For the console player (scripts/looper.py) and
-standalone cuts (scripts/cut_word.py) run with --bias-ms 0 --end-bias-ms 75
---min-word-ms 0 — keep --end-bias-ms: it corrects the aligner itself (raw CTC
-ends sit before the acoustic offset; a final stop's release lands up to
+--end-bias-ms corrects the aligner itself, not any player: raw CTC word
+ends sit before the acoustic offset (a final stop's release lands up to
 ~70 ms after the aligned end). Word ends are clamped to the next word's
 start, so the end bias never swallows a neighbouring word in fused speech.
 """
@@ -215,10 +211,10 @@ def merge_clitics(
       2. backward clitic (is, had, he, ...) with no pause -> joins the previous word;
       3. a word whose raw aligned sound is at most short_ms -> joins its
          no-pause neighbour (ties go right; pauses on both sides leave it
-         alone — min-word padding keeps it playable);
-      4. a whole group whose final span is at most min_playable_ms (the app
-         cuts ~100 ms off the end of every loop, so shorter units barely
-         sound) is rescued into the neighbouring group that makes the result
+         alone — the playability rescue below still applies);
+      4. a whole group whose final span is at most min_playable_ms (very
+         short units sound truncated when looped in any player) is rescued
+         into the neighbouring group that makes the result
          playable: the no-pause side when it helps, else either side across a
          pause. A rescue may exceed the word cap and stretch max_ms by up to
          min_playable_ms; if the caps still cut the rescue, a final pass
@@ -256,8 +252,8 @@ def merge_clitics(
             bonds[i] |= R2
 
     # Word rule: short-by-sound words glue to a no-pause neighbour
-    # (ties go right; pauses on both sides leave the word alone — min-word
-    # padding keeps a lone short word playable).
+    # (ties go right; pauses on both sides leave the word alone — the
+    # playability rescue below can still pick it up).
     for i in range(n):
         right = i < n - 1 and not ends_sentence[i]
         left = i > 0 and not ends_sentence[i - 1]
@@ -297,8 +293,7 @@ def merge_clitics(
         fits = max_ms + min_playable_ms
         for gi, g in enumerate(groups):
             gstart, gend = words[g[0]].start, words[g[-1]].end
-            # Rounded span: those are the numbers the app (and this rule's
-            # reason for existing, the 100 ms loop cut) will actually see.
+            # Rounded span: those are the numbers the player will see.
             if round(gend) - round(gstart) > min_playable_ms:
                 continue
             i_r = g[-1]  # pair (i_r, i_r+1): right boundary
@@ -442,15 +437,12 @@ def main() -> None:
     ap.add_argument("--end", type=float, default=None, help="align events until this second")
     ap.add_argument("--limit", type=int, default=None, help="align at most N events")
     ap.add_argument("--pad", type=float, default=0.75, help="audio context around each event, seconds")
-    ap.add_argument("--bias-ms", type=float, default=-50.0,
-                    help="shift word starts by this many ms (default -50: CTC spans start "
-                         "~50ms after the acoustic onset; negative adds a pre-roll cushion)")
+    ap.add_argument("--bias-ms", type=float, default=0.0,
+                    help="shift word starts by this many ms (default 0; a small negative "
+                         "value adds a pre-roll cushion)")
     ap.add_argument("--end-bias-ms", type=float, default=75.0,
                     help="extend word ends by this many ms (default 75: CTC spans end "
                          "before the acoustic offset)")
-    ap.add_argument("--min-word-ms", type=float, default=300.0,
-                    help="minimum word duration in ms (default 300: the app stops word "
-                         "loops ~100ms before endTimeMs, so shorter words lose their tail)")
     ap.add_argument("--clitic-gap-ms", type=float, default=200.0,
                     help="max raw gap between adjacent words still treated as 'no pause' "
                          "for clitic merging (default 200; raw aligner spans sit ~100ms "
@@ -467,9 +459,9 @@ def main() -> None:
                     help="words whose raw aligned sound is at most this long (ms) merge "
                          "with a no-pause neighbour (default 80; 0 disables)")
     ap.add_argument("--min-playable-ms", type=float, default=150.0,
-                    help="final word units shorter than this merge into a neighbour — the "
-                         "app cuts ~100ms off the end of every loop, so shorter units "
-                         "barely sound (default 150; 0 disables)")
+                    help="final word units shorter than this merge into a neighbour — "
+                         "very short units sound truncated when looped in any player "
+                         "(default 150; 0 disables)")
     ap.add_argument("--max-group-words", type=int, default=3,
                     help="cap on words per merged group; the playability rule may exceed it")
     ap.add_argument("--max-group-ms", type=float, default=1000.0,
@@ -690,13 +682,13 @@ def main() -> None:
             w.start = prev_start + MIN_START_STEP_MS
         prev_start = w.start
 
-    # Word ends: aligned words use the aligner's end plus a bias, at least
-    # min-word long, and never past the next word's start. Fallback words
-    # (unaligned events) keep the old heuristic: end at the next word's start.
+    # Word ends: aligned words use the aligner's end plus the end bias, and
+    # never past the next word's start. Fallback words (unaligned events)
+    # keep the old heuristic: end at the next word's start.
     for i, w in enumerate(words):
         next_start = words[i + 1].start if i + 1 < len(words) else None
         if w.end is not None:
-            end = max(w.end + args.end_bias_ms, w.start + args.min_word_ms)
+            end = max(w.end + args.end_bias_ms, w.start + MIN_START_STEP_MS)
         else:
             end = next_start if next_start is not None else w.start + 500
         if next_start is not None:
@@ -708,8 +700,8 @@ def main() -> None:
         w.end = end
 
     # Glue unstressed clitics (the, of, ...) and unplayably short units to
-    # their neighbours: in word mode the app cuts ~100ms off the end of every
-    # loop, so an isolated clitic sounds truncated or does not sound at all.
+    # their neighbours: looped on their own they sound truncated, and very
+    # short units barely sound at all — in any player.
     words, merge_stats = merge_clitics(
         words,
         gap_ms=args.clitic_gap_ms,

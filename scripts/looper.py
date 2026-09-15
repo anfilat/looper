@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Console word/phrase looper: play a phrases file's units in a tight loop.
 
-Looper's primary player (the browser app is deprecated): an audio file plus
-a .phrases.json (see scripts/align_words.py) are looped phrase-by-phrase or
-word-by-word with ffmpeg-grade, sample-accurate boundaries — the player never
-trims or seeks imprecisely, so word boundaries play back exactly as stored.
-Use a phrases file built with --bias-ms 0 --end-bias-ms 75 --min-word-ms 0:
-the first and last flag only compensate the browser player, but
---end-bias-ms corrects the aligner itself (raw CTC ends sit before the
-acoustic offset; a final stop's release lands up to ~70 ms after the aligned
-end) and must stay.
+Looper's primary player (the browser app is deprecated, phrase-only): an
+audio file plus a .phrases.json (see scripts/align_words.py) are looped
+phrase-by-phrase or word-by-word with ffmpeg-grade, sample-accurate
+boundaries — the player never trims or seeks imprecisely, so word
+boundaries play back exactly as stored. The aligner's timing defaults
+target these audible boundaries: --end-bias-ms corrects the aligner itself
+(raw CTC ends sit before the acoustic offset; a final stop's release lands
+up to ~70 ms after the aligned end).
 
 The current unit (word, phrase, or a P-prefix) is rendered once into a temp
 wav — cut, tempo-stretched (pitch preserved) and given 8 ms fades — then

@@ -10,6 +10,7 @@ export interface Phrase {
   startTimeMs: number;
   endTimeMs: number;
   text: string;
-  /** Words with timings; drives word mode. */
+  /** Per-word timings (forced alignment data); drives word mode in the
+   *  console player (scripts/looper.py) and scripts/cut_word.py. */
   words: WordTiming[];
 }
